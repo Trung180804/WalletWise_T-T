@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "418551036548",
+    "project_id": "walletwise-3612d",
+    "storage_bucket": "walletwise-3612d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418551036548:android:a869c8593ca7fcebd0e0d1",
+        "android_client_info": {
+          "package_name": "com.example.walletwise"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "418551036548-o418758tg38vd7ijtjurh9bn6ljrll8r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.walletwise",
+            "certificate_hash": "78539fc6345fd7781a72f166676e54666d1f0538"
+          }
+        },
+        {
+          "client_id": "418551036548-msqbm8ki1rk25sd1alqaslvu7ja5opse.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBU0QmpdwC1cNpAo1nc60bw_4LIEmB8AhQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "418551036548-msqbm8ki1rk25sd1alqaslvu7ja5opse.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
