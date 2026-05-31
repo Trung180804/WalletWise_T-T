@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +29,6 @@ import com.example.walletwise.domain.model.Transaction
 import java.text.NumberFormat
 import java.util.Locale
 
-// 👉 TRẠM PHÁT SÓNG THEME TOÀN CỤC (Mặc định: false = Sáng, true = Tối)
 val LocalAppTheme = compositionLocalOf<MutableState<Boolean>> { error("No Theme Found") }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,17 +43,16 @@ fun HomeScreen(
     val formatMoney = NumberFormat.getCurrencyInstance(Locale("vi", "VN"))
 
     var selectedTab by remember { mutableStateOf(0) }
-
-    // Biến quản lý trạng thái Sáng/Tối
     val isDarkTheme = remember { mutableStateOf(false) }
-    // Biến quản lý ẩn/hiện BottomBar
     var isSubScreenOpen by remember { mutableStateOf(false) }
 
     val footerBgColor = Color(0xFF4DD0E1)
 
-    // Bọc toàn bộ app trong trạm phát sóng Theme
+    // Khởi tạo các biến cho bộ lọc phương thức thanh toán
+    val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
+    var selectedFilter by remember { mutableStateOf(filters[0]) }
+
     CompositionLocalProvider(LocalAppTheme provides isDarkTheme) {
-        // Tự động đổi màu nền theo Theme
         val bgColor = if (isDarkTheme.value) Color(0xFF121212) else Color(0xFFF4F6F8)
         val textColor = if (isDarkTheme.value) Color.White else Color.Black
         val cardColor = if (isDarkTheme.value) Color(0xFF1E1E1E) else Color.White
@@ -73,7 +72,6 @@ fun HomeScreen(
                 }
             },
             bottomBar = {
-                // 👉 CHỈ HIỂN THỊ FOOTER KHI KHÔNG MỞ MÀN HÌNH CON
                 if (!isSubScreenOpen) {
                     Row(
                         modifier = Modifier
@@ -106,6 +104,14 @@ fun HomeScreen(
             Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 when (selectedTab) {
                     0 -> {
+                        // Lọc danh sách giao dịch dựa trên Filter được chọn
+                        val displayedTransactions = if (selectedFilter == "Tất cả") {
+                            transactions
+                        } else {
+                            // TODO: Thay "it.note" bằng trường Hình thức thanh toán (ví dụ: it.paymentMethod) khi bạn cập nhật lại Model
+                            transactions.filter { it.note.contains(selectedFilter, ignoreCase = true) }
+                        }
+
                         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
@@ -123,19 +129,52 @@ fun HomeScreen(
                                     )
                                 }
                             }
+
                             Text("Giao dịch gần đây", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(16.dp))
+
+                            // 👉 ĐÃ THÊM BỘ LỌC VÀO ĐÂY
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(filters) { filter ->
+                                    val isSelected = selectedFilter == filter
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(if (isSelected) Color(0xFF4DD0E1) else cardColor)
+                                            .clickable { selectedFilter = filter }
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = filter,
+                                            // Đổi màu chữ tương ứng với màu nền
+                                            color = if (isSelected) Color.Black else textColor,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
                             LazyColumn {
-                                items(transactions) { trans -> TransactionItem(trans, formatMoney, cardColor, textColor) }
+                                // Hiển thị danh sách đã được lọc (displayedTransactions)
+                                items(displayedTransactions) { trans ->
+                                    TransactionItem(trans, formatMoney, cardColor, textColor)
+                                }
                             }
                         }
                     }
                     1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { selectedTab = 0 })
                     2 -> AddTransactionScreen(viewModel = viewModel, onNavigateBack = { selectedTab = 0 })
-                    3 -> PlaceholderScreen("Màn hình Báo Cáo Thống Kê")
+                    3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
                     4 -> ProfileScreen(
                         onLogout = onLogout,
-                        onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen } // Báo cho Home biết để ẩn Footer
+                        onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen }
                     )
                 }
             }

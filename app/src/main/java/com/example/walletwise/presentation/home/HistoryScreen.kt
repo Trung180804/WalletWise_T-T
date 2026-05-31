@@ -4,10 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,9 +46,6 @@ fun HistoryScreen(
     var currentYearMonth by remember { mutableStateOf(YearMonth.now()) }
     var showMonthPicker by remember { mutableStateOf(false) }
 
-    val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
-    var selectedFilter by remember { mutableStateOf(filters[0]) }
-
     val daysInMonth = currentYearMonth.lengthOfMonth()
     val firstDayOfMonth = currentYearMonth.atDay(1)
     val startDayOffset = firstDayOfMonth.dayOfWeek.value - 1
@@ -61,38 +56,13 @@ fun HistoryScreen(
             .background(Color(0xFF121212))
             .padding(top = 16.dp, start = 16.dp, end = 16.dp)
     ) {
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filters) { filter ->
-                val isSelected = selectedFilter == filter
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) Color(0xFF4DD0E1) else Color(0xFF2C2C2C))
-                        .clickable { selectedFilter = filter }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = filter,
-                        color = if (isSelected) Color.Black else Color.White,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
+        // Đã xóa LazyRow bộ lọc ở đây
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Thay ChevronLeft bằng ArrowBack
             IconButton(onClick = { currentYearMonth = currentYearMonth.minusMonths(1) }) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Trở lại", tint = Color(0xFF4DD0E1))
             }
@@ -122,7 +92,6 @@ fun HistoryScreen(
                 }
             }
 
-            // Thay ChevronRight bằng ArrowForward
             IconButton(onClick = { currentYearMonth = currentYearMonth.plusMonths(1) }) {
                 Icon(Icons.Default.ArrowForward, contentDescription = "Tiếp", tint = Color(0xFF4DD0E1))
             }
@@ -266,7 +235,6 @@ fun MonthPickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (YearMonth) -> Unit
 ) {
-    // Sửa lỗi cảnh báo màu vàng bằng cách dùng mutableIntStateOf
     var tempYear by remember { mutableIntStateOf(initialYearMonth.year) }
     var tempMonth by remember { mutableIntStateOf(initialYearMonth.monthValue) }
 
