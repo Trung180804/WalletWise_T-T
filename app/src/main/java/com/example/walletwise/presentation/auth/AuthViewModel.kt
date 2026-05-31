@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.walletwise.data.repository.AuthRepositoryImpl
 import com.example.walletwise.domain.repository.AuthRepository
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,6 +18,8 @@ class AuthViewModel(
     private val _state = MutableStateFlow(AuthState())
     val state: StateFlow<AuthState> = _state.asStateFlow()
 
+    private val _currentUser = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
+    val currentUser: StateFlow<com.example.walletwise.domain.model.User?> = _currentUser.asStateFlow()
     fun register(email: String, pass: String, username: String) {
         if (email.isBlank() || pass.isBlank() || username.isBlank()) {
             _state.value = AuthState(error = "Vui lòng nhập đầy đủ thông tin!")
@@ -24,7 +28,9 @@ class AuthViewModel(
         viewModelScope.launch {
             _state.value = AuthState(isLoading = true)
             repository.register(email, pass, username)
-                .onSuccess { _state.value = AuthState(isSuccess = true) }
+                .onSuccess {
+                    loadUserProfile()
+                    _state.value = AuthState(isSuccess = true) }
                 .onFailure { _state.value = AuthState(error = it.localizedMessage ?: "Đăng ký thất bại") }
         }
     }
@@ -37,9 +43,16 @@ class AuthViewModel(
         viewModelScope.launch {
             _state.value = AuthState(isLoading = true)
             repository.login(email, pass)
-                .onSuccess { _state.value = AuthState(isSuccess = true) }
+                .onSuccess {
+                    loadUserProfile()
+                    _state.value = AuthState(isSuccess = true) }
                 .onFailure { _state.value = AuthState(error = it.localizedMessage ?: "Đăng nhập thất bại") }
         }
+    }
+
+    fun logout() {
+        _currentUser.value = null
+        _state.value = AuthState() // Reset trạng thái
     }
 
     fun resetPassword(email: String) {
@@ -57,5 +70,15 @@ class AuthViewModel(
 
     fun clearError() {
         _state.value = _state.value.copy(error = null)
+    }
+
+    fun loadUserProfile() {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        FirebaseFirestore.getInstance().collection("users").document(uid).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    _currentUser.value = doc.toObject(com.example.walletwise.domain.model.User::class.java)
+                }
+            }
     }
 }

@@ -78,10 +78,45 @@ fun AddTransactionScreen(
     }
 
     fun launchCamera() {
-        val file = File.createTempFile("receipt_", ".jpg", context.cacheDir)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        tempImageUri = uri
-        cameraLauncher.launch(uri)
+        try {
+            // 1. Tạo file tạm trong thư mục Cache
+            val file = File(context.cacheDir, "receipt_${System.currentTimeMillis()}.jpg")
+            if (file.exists()) file.delete()
+            file.createNewFile()
+
+            // 2. Lấy URI an toàn qua FileProvider
+            val authority = "com.example.walletwise.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, file)
+
+            // 3. Gọi Camera
+            tempImageUri = uri
+            cameraLauncher.launch(uri)
+
+        } catch (e: IllegalArgumentException) {
+            // Lỗi 1: Do gõ sai tên authority hoặc cấu hình file_paths.xml bị trật
+            android.widget.Toast.makeText(
+                context,
+                "LỖI MANIFEST: Chưa cấu hình đúng FileProvider!",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            e.printStackTrace()
+        } catch (e: android.content.ActivityNotFoundException) {
+            // Lỗi 2: Điện thoại/Máy ảo không có ứng dụng Camera
+            android.widget.Toast.makeText(
+                context,
+                "LỖI THIẾT BỊ: Không tìm thấy ứng dụng Camera!",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            e.printStackTrace()
+        } catch (e: Exception) {
+            // Các lỗi bí ẩn khác
+            android.widget.Toast.makeText(
+                context,
+                "LỖI CAMERA: ${e.localizedMessage}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            e.printStackTrace()
+        }
     }
 
     Scaffold(
@@ -240,7 +275,9 @@ fun AddTransactionScreen(
             Button(
                 onClick = {
                     val amountValue = amount.toDoubleOrNull() ?: 0.0
-                    viewModel.addTransaction(amountValue, type, category, note, capturedImageUri, context) {
+
+                    // TRUYỀN THÊM selectedWallet VÀO HÀM NÀY
+                    viewModel.addTransaction(amountValue, type, category, note, selectedWallet, capturedImageUri, context) {
                         onNavigateBack()
                     }
                 },

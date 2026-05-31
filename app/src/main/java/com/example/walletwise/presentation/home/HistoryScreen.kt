@@ -157,75 +157,83 @@ fun DayCell(
     transactions: List<Transaction>,
     onClick: () -> Unit
 ) {
+    // Lấy danh sách ảnh từ các giao dịch trong ngày
     val images = transactions.mapNotNull { it.imageUrl }.filter { it.isNotEmpty() }
 
     Box(
         modifier = Modifier
-            .aspectRatio(0.8f)
-            .padding(4.dp)
+            .aspectRatio(0.65f) // Chỉnh tỷ lệ ô lịch dài hơn một chút để chứa vừa ảnh và số ngày
+            .padding(2.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(if (isToday) Color(0xFF2C2C2C) else Color.Transparent)
             .clickable { onClick() },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.TopCenter // Đẩy nội dung lên trên cùng
     ) {
-        Text(
-            text = date.dayOfMonth.toString(),
-            color = if (isToday) Color(0xFFFFD700) else Color.White,
-            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-            fontSize = 14.sp,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp)
-        )
-
+        // 1. KHU VỰC HIỂN THỊ ẢNH
         if (images.isNotEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 20.dp),
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, start = 4.dp, end = 4.dp)
+                    .aspectRatio(1f), // Ép khu vực chứa ảnh thành hình vuông
                 contentAlignment = Alignment.Center
             ) {
+                // Ảnh nền (Nếu có từ 2 ảnh trở lên, tạo hiệu ứng xếp chồng)
                 if (images.size >= 2) {
                     AsyncImage(
                         model = images[1],
                         contentDescription = null,
                         modifier = Modifier
-                            .size(36.dp)
-                            .offset(x = (-8).dp, y = (-4).dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(2.dp, Color.White, RoundedCornerShape(8.dp)),
+                            .fillMaxSize(0.85f) // Nhỏ hơn ảnh chính một chút
+                            .offset(x = (-6).dp, y = (-6).dp) // Lệch về góc trái trên
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(2.dp, Color.White, RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
                 }
 
+                // Ảnh chính (Nằm trên cùng)
                 AsyncImage(
                     model = images[0],
                     contentDescription = null,
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(2.dp, Color.White, RoundedCornerShape(8.dp)),
+                        .fillMaxSize(0.9f) // Chiếm 90% diện tích ô vuông
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(2.dp, Color.White, RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
 
-                if (images.size > 2) {
+                // Badge đếm số lượng ảnh (+1, +2...)
+                if (images.size > 1) {
                     Box(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = 4.dp, y = (-4).dp)
-                            .size(18.dp)
-                            .background(Color.Black.copy(alpha = 0.8f), CircleShape)
-                            .border(1.dp, Color.White, CircleShape),
+                            .align(Alignment.TopEnd) // Neo vào góc trên cùng bên phải
+                            .offset(x = 6.dp, y = (-4).dp)
+                            .background(Color.White, RoundedCornerShape(8.dp)) // Nền trắng bo góc như ảnh mẫu
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "+${images.size - 2}",
-                            color = Color.White,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold
+                            text = "+${images.size - 1}",
+                            color = Color.Black, // Chữ đen nổi bật trên nền trắng
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }
             }
         }
+
+        // 2. HIỂN THỊ NGÀY (Nằm ở dưới đáy ô lịch)
+        Text(
+            text = date.dayOfMonth.toString(),
+            color = if (isToday) Color(0xFFFFD700) else Color.White,
+            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 6.dp)
+        )
     }
 }
 

@@ -10,17 +10,17 @@ import com.example.walletwise.presentation.auth.*
 import com.example.walletwise.presentation.home.AddTransactionScreen
 import com.example.walletwise.presentation.home.HomeScreen
 import com.example.walletwise.presentation.home.TransactionViewModel
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    authViewModel: AuthViewModel,
+    transactionViewModel: TransactionViewModel,
+    currentUser: com.example.walletwise.domain.model.User? // Nhận user từ MainActivity
+) {
     val navController = rememberNavController()
 
-    // Khởi tạo Repository và ViewModel
     val authRepository = remember { AuthRepositoryImpl() }
-    val authViewModel = remember { AuthViewModel(authRepository) }
-
-    // ĐIỂM ĂN TIỀN: Kiểm tra đăng nhập vĩnh viễn (Offline)
-    // Nếu Firebase đã có phiên đăng nhập, ném thẳng vào "home", ngược lại vào "login"
     val startRoute = if (authRepository.isUserLoggedIn()) "home" else "login"
 
     NavHost(navController = navController, startDestination = startRoute) {
@@ -31,6 +31,7 @@ fun AppNavigation() {
                 onNavigateToRegister = { navController.navigate("register") },
                 onNavigateToForgotPassword = { navController.navigate("forgot_password") },
                 onLoginSuccess = {
+                    authViewModel.loadUserProfile()
                     navController.navigate("home") {
                         // Xóa sạch lịch sử màn hình login để ấn nút Back không bị quay lại
                         popUpTo("login") { inclusive = true }
@@ -44,6 +45,7 @@ fun AppNavigation() {
                 viewModel = authViewModel,
                 onNavigateToLogin = { navController.popBackStack() }, // Quay lại trang trước
                 onRegisterSuccess = {
+                    authViewModel.loadUserProfile()
                     navController.navigate("home") {
                         popUpTo("login") { inclusive = true }
                         popUpTo("register") { inclusive = true }
@@ -60,26 +62,25 @@ fun AppNavigation() {
         }
 
         composable("home") {
-            // Khởi tạo ViewModel cho giao dịch
-            val transactionViewModel = remember { TransactionViewModel() }
-
             HomeScreen(
                 viewModel = transactionViewModel,
-                onNavigateToAdd = {
-                    navController.navigate("add_transaction")
-                },
+                user = currentUser, // 👉 Đây là user cũ từ MainActivity
+                onNavigateToAdd = { navController.navigate("add_transaction") },
                 onLogout = {
-                    authRepository.logout()
+
+                    authViewModel.logout()
+                    // 1. Đăng xuất Firebase trực tiếp
+                    FirebaseAuth.getInstance().signOut()
+
+                    // 2. Chuyển màn hình và "dọn sạch" toàn bộ stack cũ
                     navController.navigate("login") {
-                        popUpTo("home") { inclusive = true }
+                        popUpTo(0) { inclusive = true } // Lệnh này xóa hết các màn hình cũ, không bị treo nữa
                     }
                 }
             )
         }
 
         composable("add_transaction") {
-            // Dùng chung viewModel để dữ liệu đồng bộ với Home
-            val transactionViewModel = remember { TransactionViewModel() }
             AddTransactionScreen(
                 viewModel = transactionViewModel,
                 onNavigateBack = { navController.popBackStack() }

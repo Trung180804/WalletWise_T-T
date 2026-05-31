@@ -40,13 +40,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.walletwise.R // 👉 Thêm dòng này để nhận diện được ảnh R.drawable.logo
-import com.google.firebase.auth.FirebaseAuth
+import com.example.walletwise.R
 import java.text.DecimalFormat
 
-// ================================================================
-// ROUTE ENUM
-// ================================================================
 enum class ProfileRoute {
     MAIN, EDIT_PROFILE, SETTINGS,
     FONT_SIZE, CURRENCY, DEFAULT_CURRENCY, THEME,
@@ -54,11 +50,12 @@ enum class ProfileRoute {
     ABOUT_US, REMINDERS
 }
 
-// ================================================================
-// ENTRY POINT
-// ================================================================
 @Composable
-fun ProfileScreen(onLogout: () -> Unit, onSubScreenChange: (Boolean) -> Unit) {
+fun ProfileScreen(
+    user: com.example.walletwise.domain.model.User?,
+    onLogout: () -> Unit,
+    onSubScreenChange: (Boolean) -> Unit
+) {
     var currentRoute by remember { mutableStateOf(ProfileRoute.MAIN) }
 
     LaunchedEffect(currentRoute) {
@@ -68,12 +65,9 @@ fun ProfileScreen(onLogout: () -> Unit, onSubScreenChange: (Boolean) -> Unit) {
     BackHandler(enabled = currentRoute != ProfileRoute.MAIN) {
         currentRoute = when (currentRoute) {
             ProfileRoute.ADD_RECURRING -> ProfileRoute.RECURRING
-            ProfileRoute.FONT_SIZE,
-            ProfileRoute.THEME,
-            ProfileRoute.RECURRING,
-            ProfileRoute.REMINDERS,
-            ProfileRoute.DEFAULT_CURRENCY -> ProfileRoute.SETTINGS
-            else                          -> ProfileRoute.MAIN
+            ProfileRoute.FONT_SIZE, ProfileRoute.THEME, ProfileRoute.RECURRING,
+            ProfileRoute.REMINDERS, ProfileRoute.DEFAULT_CURRENCY -> ProfileRoute.SETTINGS
+            else -> ProfileRoute.MAIN
         }
     }
 
@@ -82,146 +76,84 @@ fun ProfileScreen(onLogout: () -> Unit, onSubScreenChange: (Boolean) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
         when (currentRoute) {
-            ProfileRoute.MAIN         -> MainProfileView(onLogout) { currentRoute = it }
-            ProfileRoute.EDIT_PROFILE -> EditProfileView { currentRoute = ProfileRoute.MAIN }
-            ProfileRoute.SETTINGS     -> SettingsMainView(
-                onNavigate = { currentRoute = it },
-                onBack     = { currentRoute = ProfileRoute.MAIN }
-            )
-            ProfileRoute.FONT_SIZE    -> FontSizeView { currentRoute = ProfileRoute.SETTINGS }
-            ProfileRoute.CURRENCY     -> CurrencyConverterView { currentRoute = ProfileRoute.MAIN }
-            ProfileRoute.THEME        -> ThemeView { currentRoute = ProfileRoute.SETTINGS }
-            ProfileRoute.RECURRING    -> RecurringView(onAdd = { currentRoute = ProfileRoute.ADD_RECURRING }, onBack = { currentRoute = ProfileRoute.SETTINGS })
+            ProfileRoute.MAIN -> MainProfileView(onLogout, user) { currentRoute = it }
+            ProfileRoute.EDIT_PROFILE -> EditProfileView(user = user) { currentRoute = ProfileRoute.MAIN }
+            ProfileRoute.SETTINGS -> SettingsMainView(onNavigate = { currentRoute = it }, onBack = { currentRoute = ProfileRoute.MAIN })
+            ProfileRoute.FONT_SIZE -> FontSizeView { currentRoute = ProfileRoute.SETTINGS }
+            ProfileRoute.CURRENCY -> CurrencyConverterView { currentRoute = ProfileRoute.MAIN }
+            ProfileRoute.THEME -> ThemeView { currentRoute = ProfileRoute.SETTINGS }
+            ProfileRoute.RECURRING -> RecurringView(onAdd = { currentRoute = ProfileRoute.ADD_RECURRING }, onBack = { currentRoute = ProfileRoute.SETTINGS })
             ProfileRoute.ADD_RECURRING -> AddRecurringView { currentRoute = ProfileRoute.RECURRING }
-            ProfileRoute.ABOUT_US      -> AboutUsView { currentRoute = ProfileRoute.MAIN }
-            ProfileRoute.REMINDERS     -> RemindersView { currentRoute = ProfileRoute.SETTINGS }
+            ProfileRoute.ABOUT_US -> AboutUsView { currentRoute = ProfileRoute.MAIN }
+            ProfileRoute.REMINDERS -> RemindersView { currentRoute = ProfileRoute.SETTINGS }
             ProfileRoute.DEFAULT_CURRENCY -> DefaultCurrencyView { currentRoute = ProfileRoute.SETTINGS }
         }
     }
 }
 
-// ================================================================
-// 1. MÀN HÌNH CHÍNH PROFILE
-// ================================================================
-// ================================================================
-// 1. MÀN HÌNH CHÍNH PROFILE (ĐÃ THÊM XÁC NHẬN ĐĂNG XUẤT)
-// ================================================================
 @Composable
 fun MainProfileView(
     onLogout: () -> Unit,
+    user: com.example.walletwise.domain.model.User?,
     onNavigate: (ProfileRoute) -> Unit
 ) {
-    val user  = FirebaseAuth.getInstance().currentUser
+    val userName = user?.username?.takeIf { it.isNotBlank() } ?: "Người dùng"
     val email = user?.email ?: "Chưa đăng nhập"
+    val firstLetter = userName.filter { it.isLetter() }.firstOrNull()?.toString()?.uppercase() ?: "U"
     val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-
-    // Biến trạng thái để ẩn/hiện hộp thoại xác nhận đăng xuất
+    val textC = if (isDark) Color.White else Color.Black
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(32.dp))
-
-        // Avatar
         Box(
-            modifier = Modifier
-                .size(90.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFE91E63)),
+            modifier = Modifier.size(90.dp).clip(CircleShape).background(Color(0xFFE91E63)),
             contentAlignment = Alignment.Center
         ) {
-            Text("T", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+            Text(firstLetter, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
         }
-
         Spacer(Modifier.height(16.dp))
-        Text("Trung Đinh", color = textC, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(userName, color = textC, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(email, color = Color.Gray, fontSize = 14.sp)
         Spacer(Modifier.height(32.dp))
 
-        // Menu items
-        MenuRowItem(Icons.Default.Person,  "Hồ sơ")                    { onNavigate(ProfileRoute.EDIT_PROFILE) }
-        MenuRowItem(Icons.Default.Refresh, "Quy đổi mệnh giá tiền")   { onNavigate(ProfileRoute.CURRENCY) }
-        MenuRowItem(Icons.Default.Settings,"Cài đặt")                  { onNavigate(ProfileRoute.SETTINGS) }
-        MenuRowItem(Icons.Default.Share,   "Giới thiệu cho bạn bè")   { /* share intent */ }
-        MenuRowItem(Icons.Default.Info,    "Về chúng tôi")             { onNavigate(ProfileRoute.ABOUT_US) }
+        MenuRowItem(Icons.Default.Person, "Hồ sơ") { onNavigate(ProfileRoute.EDIT_PROFILE) }
+        MenuRowItem(Icons.Default.Refresh, "Quy đổi mệnh giá tiền") { onNavigate(ProfileRoute.CURRENCY) }
+        MenuRowItem(Icons.Default.Settings, "Cài đặt") { onNavigate(ProfileRoute.SETTINGS) }
+        MenuRowItem(Icons.Default.Info, "Về chúng tôi") { onNavigate(ProfileRoute.ABOUT_US) }
 
         Spacer(Modifier.height(32.dp))
-
-        // Nút đăng xuất (bấm vào sẽ hiện Dialog thay vì đăng xuất luôn)
         Button(
-            onClick  = { showLogoutDialog = true },
+            onClick = { showLogoutDialog = true },
             modifier = Modifier.fillMaxWidth().height(55.dp),
-            colors   = ButtonDefaults.buttonColors(
-                containerColor = if (isDark) Color(0xFF333333) else Color(0xFFE0E0E0)
-            ),
+            colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF333333) else Color(0xFFE0E0E0)),
             shape = RoundedCornerShape(16.dp)
         ) {
             Text("Đăng xuất", color = Color(0xFFFA3B70), fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
-
-        Spacer(Modifier.height(100.dp))
     }
 
-    // ── HỘP THOẠI XÁC NHẬN ĐĂNG XUẤT ──────────────────────────────
     if (showLogoutDialog) {
-        Dialog(onDismissRequest = { showLogoutDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isDark) Color(0xFF1E1E1E) else Color.White
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Đăng xuất", color = Color(0xFFFA3B70), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        "Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?",
-                        color = textC,
-                        fontSize = 16.sp,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(Modifier.height(24.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { showLogoutDialog = false },
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            shape = CircleShape
-                        ) {
-                            Text("Hủy bỏ", color = textC, fontWeight = FontWeight.Bold)
-                        }
-
-                        Spacer(Modifier.width(12.dp))
-
-                        Button(
-                            onClick = {
-                                showLogoutDialog = false
-                                onLogout() // Gọi hàm đăng xuất thật sự ở đây
-                            },
-                            modifier = Modifier.weight(1f).height(50.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFA3B70)),
-                            shape = CircleShape
-                        ) {
-                            Text("Đăng xuất", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Đăng xuất") },
+            text = { Text("Bạn có chắc chắn muốn đăng xuất?") },
+            confirmButton = {
+                Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFA3B70))) {
+                    Text("Đăng xuất")
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Hủy") }
             }
-        }
+        )
     }
 }
 
+// ... (Giữ nguyên các hàm còn lại: CurrencyConverterView, RemindersView, v.v. như file cũ của bạn)
 // ================================================================
 // 2. QUY ĐỔI NGOẠI TỆ — Calculator có xử lý operator đầy đủ
 // ================================================================
@@ -851,19 +783,21 @@ fun DefaultCurrencyView(onBack: () -> Unit) {
     }
 }
 
-// ================================================================
-// 10. SỬA HỒ SƠ
-// ================================================================
 @Composable
-fun EditProfileView(onBack: () -> Unit) {
+fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () -> Unit) {
     val context = LocalContext.current
-    val myId = "113220"
+
+    // 👉 Lấy dữ liệu thật từ model User, nếu null thì hiện mặc định
+    val myId = user?.id?.takeIf { it.isNotBlank() } ?: "Chưa có ID"
+    val realEmail = user?.email?.takeIf { it.isNotBlank() } ?: "Chưa có Email"
+    val firstLetter = user?.username?.filter { it.isLetter() }?.firstOrNull()?.toString()?.uppercase() ?: "U"
 
     var showNameDialog by remember { mutableStateOf(false) }
     var showGenderDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
-    var nickname by remember { mutableStateOf("Trung Đinh") }
+    // 👉 Khởi tạo state bằng tên thật của user
+    var nickname by remember { mutableStateOf(user?.username ?: "Người dùng") }
     var gender by remember { mutableStateOf("Khác") }
 
     val isDark = LocalAppTheme.current.value
@@ -875,14 +809,25 @@ fun EditProfileView(onBack: () -> Unit) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Ảnh đại diện", color = textC, fontSize = 16.sp)
-                Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFFE91E63)), contentAlignment = Alignment.Center) { Text("T", color = Color.White, fontSize = 24.sp) }
+                Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFFE91E63)), contentAlignment = Alignment.Center) {
+                    Text(firstLetter, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                }
             }
             ThemedDivider()
+
+            // 👉 Hiển thị ID thật
             EditRowItem("ID", myId) {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("ID", myId))
                 Toast.makeText(context, "Đã sao chép ID", Toast.LENGTH_SHORT).show()
             }
+
+            // 👉 Hiển thị Email thật (Không cho sửa qua form này)
+            EditRowItem("Email", realEmail) {
+                Toast.makeText(context, "Email không thể thay đổi tại đây", Toast.LENGTH_SHORT).show()
+            }
+
+            // 👉 Hiển thị Biệt danh thật
             EditRowItem("Biệt danh", nickname) { showNameDialog = true }
             EditRowItem("Giới tính", gender) { showGenderDialog = true }
             EditRowItem("Đổi mật khẩu", "") { showPasswordDialog = true }
@@ -902,7 +847,11 @@ fun EditProfileView(onBack: () -> Unit) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         Button(onClick = { showNameDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, null, tint = Color.Black) }
                         Spacer(Modifier.width(16.dp))
-                        Button(onClick = { nickname = tempName; showNameDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Check, null, tint = Color.Black) }
+                        Button(onClick = {
+                            nickname = tempName
+                            showNameDialog = false
+                            // TODO: Gọi ViewModel để update tên mới lên Firestore tại đây nếu cần
+                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Check, null, tint = Color.Black) }
                     }
                 }
             }

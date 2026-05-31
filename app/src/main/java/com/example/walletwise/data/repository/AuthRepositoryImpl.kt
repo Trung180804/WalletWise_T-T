@@ -3,6 +3,7 @@ package com.example.walletwise.data.repository
 import com.example.walletwise.domain.repository.AuthRepository
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.FirebaseFirestore
 
 class AuthRepositoryImpl : AuthRepository {
     // Khởi tạo Firebase Auth
@@ -17,6 +18,14 @@ class AuthRepositoryImpl : AuthRepository {
         return try {
             val result = auth.createUserWithEmailAndPassword(email, pass).await()
             // Lệnh .await() giúp code đứng đợi Firebase trả kết quả về
+            val uid = result.user?.uid ?: throw Exception("Không lấy được UID")
+
+            val userMap = mapOf(
+                "id" to uid,
+                "email" to email,
+                "username" to username
+            )
+            FirebaseFirestore.getInstance().collection("users").document(uid).set(userMap).await()
             Result.success(result.user != null)
         } catch (e: Exception) {
             Result.failure(e)
