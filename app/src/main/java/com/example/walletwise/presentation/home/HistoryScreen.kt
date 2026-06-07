@@ -53,10 +53,9 @@ fun HistoryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(Color(0xFFF5F7FA))
             .padding(top = 16.dp, start = 16.dp, end = 16.dp)
     ) {
-        // Đã xóa LazyRow bộ lọc ở đây
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -73,7 +72,7 @@ fun HistoryScreen(
             ) {
                 Text(
                     text = "tháng ${currentYearMonth.monthValue} ${currentYearMonth.year}",
-                    color = Color.White,
+                    color = Color(0xFF2D3436),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -160,12 +159,13 @@ fun DayCell(
     // Lấy danh sách ảnh từ các giao dịch trong ngày
     val images = transactions.mapNotNull { it.imageUrl }.filter { it.isNotEmpty() }
 
+    val todayBgColor = Color(0xFFE3F2FD)
     Box(
         modifier = Modifier
             .aspectRatio(0.65f) // Chỉnh tỷ lệ ô lịch dài hơn một chút để chứa vừa ảnh và số ngày
             .padding(2.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isToday) Color(0xFF2C2C2C) else Color.Transparent)
+            .background(if (isToday) todayBgColor else Color.Transparent)
             .clickable { onClick() },
         contentAlignment = Alignment.TopCenter // Đẩy nội dung lên trên cùng
     ) {
@@ -227,7 +227,7 @@ fun DayCell(
         // 2. HIỂN THỊ NGÀY (Nằm ở dưới đáy ô lịch)
         Text(
             text = date.dayOfMonth.toString(),
-            color = if (isToday) Color(0xFFFFD700) else Color.White,
+            color = if (isToday) Color(0xFF2196F3) else Color(0xFF2D3436),
             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
             fontSize = 13.sp,
             modifier = Modifier

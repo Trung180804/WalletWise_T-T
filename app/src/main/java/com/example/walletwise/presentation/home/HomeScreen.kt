@@ -1,10 +1,15 @@
 package com.example.walletwise.presentation.home
 
-import coil.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import com.google.firebase.auth.FirebaseAuth
-import com.example.walletwise.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,46 +17,70 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
+import com.example.walletwise.R
 import com.example.walletwise.domain.model.Transaction
+import com.example.walletwise.domain.model.User
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
+import androidx.compose.material.icons.filled.LocalFireDepartment
+// 👉 GIẢI QUYẾT LỖI XUNG ĐỘT HÀM ITEMS
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.grid.items as gridItems
 
 val LocalAppTheme = compositionLocalOf<MutableState<Boolean>> { error("No Theme Found") }
+
+private val BannerGradient = Brush.linearGradient(
+    colors = listOf(
+        Color(0xFF1E3C72), // Blue đậm
+        Color(0xFF2A5298)  // Blue sáng
+    )
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: TransactionViewModel,
-    user: com.example.walletwise.domain.model.User?,
+    user: User?,
     onNavigateToAdd: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -64,20 +93,23 @@ fun HomeScreen(
     var isSubScreenOpen by remember { mutableStateOf(false) }
 
     val footerBgColor = Color(0xFF4DD0E1)
-
     val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
     var selectedFilter by remember { mutableStateOf(filters[0]) }
-
     var selectedDateFilter by remember { mutableStateOf<LocalDate?>(null) }
+
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showAIModal by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     CompositionLocalProvider(LocalAppTheme provides isDarkTheme) {
-        val bgColor = if (isDarkTheme.value) Color(0xFF121212) else Color(0xFFF4F6F8)
-        val textColor = if (isDarkTheme.value) Color.White else Color.Black
-        val cardColor = if (isDarkTheme.value) Color(0xFF1E1E1E) else Color.White
-
-        // Màu nền xanh đen đặc trưng của phần Header giống ảnh mẫu
-        val topHeaderColor = Color(0xFF1A1A2E)
+        // Thay thế các biến trong HomeScreen của bạn bằng bộ màu mới này
+        val bgColor = Color(0xFFF8F9FA) // Nền trắng xám nhạt
+        val cardColor = Color.White
+        val topHeaderBrush = Brush.verticalGradient(
+            colors = listOf(Color(0xFFE3F2FD), Color(0xFFF8F9FA)) // Xanh rất nhạt chuyển sang Trắng
+        )
+        val footerBgColor = Color(0xFF2196F3) // Màu xanh đậm hơn một chút để làm điểm nhấn ở footer
+        val textColor = Color(0xFF2D3436) // Chữ xám đậm (không dùng đen tuyền)
 
         Scaffold(
             topBar = {
@@ -85,28 +117,65 @@ fun HomeScreen(
                     TopAppBar(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                // 👉 Chèn Logo vào đây
                                 Image(
                                     painter = painterResource(id = R.drawable.logo),
                                     contentDescription = "Logo WalletWise",
-                                    modifier = Modifier
-                                        .size(36.dp) // Kích thước logo
-                                        .clip(CircleShape) // Bo tròn logo (nếu muốn giữ hình vuông thì xóa dòng clip này đi)
+                                    modifier = Modifier.size(36.dp).clip(CircleShape)
                                 )
-                                Spacer(modifier = Modifier.width(12.dp)) // Khoảng cách giữa logo và chữ
-                                Text("WalletWise", color = Color.White, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "WalletWise",
+                                    color = Color(0xFF2196F3),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.weight(1f)) // Đẩy phần streak sang góc phải
+
+                                // Hiển thị lửa và số ngày
+                                if ((user?.currentStreak ?: 0) > 0) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Filled.LocalFireDepartment,
+                                            contentDescription = "Streak",
+                                            tint = Color(0xFFFF9800), // Màu cam của lửa
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "${user?.currentStreak}",
+                                            color = Color(0xFFFF9800),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
                             }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = topHeaderColor),
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                         actions = {
-                            IconButton(onClick = { /* TODO: Xử lý tìm kiếm */ }) {
-                                Icon(Icons.Default.Search, contentDescription = "Tìm kiếm", tint = Color.White)
+                            IconButton(onClick = { /* TODO */ }) {
+                                Icon(Icons.Default.Search, contentDescription = "Tìm kiếm", tint = Color(0xFF2D3436))
                             }
                             IconButton(onClick = { showLogoutDialog = true }) {
-                                Icon(Icons.Default.ExitToApp, contentDescription = "Đăng xuất", tint = Color.White)
+                                Icon(Icons.Default.ExitToApp, contentDescription = "Đăng xuất", tint = Color(0xFF2D3436))
                             }
                         }
                     )
+                }
+            },
+            floatingActionButton = {
+                if (selectedTab == 0 && !isSubScreenOpen) {
+                    Box(
+                        modifier = Modifier
+                            .offset(y = (-30).dp)
+                            .size(60.dp)
+                            .shadow(8.dp, CircleShape)
+                            .background(Brush.linearGradient(listOf(Color(0xFF9C27B0), Color(0xFFFA3B70))), CircleShape)
+                            .clickable { showAIModal = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "🤖", fontSize = 28.sp)
+                    }
                 }
             },
             bottomBar = {
@@ -142,10 +211,8 @@ fun HomeScreen(
             Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 when (selectedTab) {
                     0 -> {
-                        // Tính toán Thu / Chi TỔNG QUÁT cho phần Header
                         val totalIncomeAll = transactions.filter { it.type == "Thu" }.sumOf { it.amount }
                         val totalExpenseAll = transactions.filter { it.type == "Chi" }.sumOf { it.amount }
-
                         val displayedTransactions = transactions.filter { trans ->
                             val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
                             val matchDate = if (selectedDateFilter == null) true else {
@@ -153,76 +220,75 @@ fun HomeScreen(
                                 txDate == selectedDateFilter
                             }
                             matchMethod && matchDate
-                        }
+                        }.sortedByDescending { it.timestamp }
 
-                        // Bao bọc toàn bộ trang Home
-                        Column(modifier = Modifier.fillMaxSize().background(topHeaderColor)) {
+                        Column(modifier = Modifier.fillMaxSize().background(topHeaderBrush)) {
+                            Column(modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)) {
 
-                            // --- HEADER: HỒ SƠ & THỐNG KÊ (NỀN XANH ĐEN) ---
-                            Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-
-                                // 👉 TRÍCH XUẤT THÔNG TIN THÔNG MINH TỪ FIREBASE
-                                val email = user?.email ?: "Chưa đăng nhập"
-                                val userName = user?.username?.takeIf { it.isNotBlank() } ?: "Người dùng"
-                                val firstLetter = userName.filter { it.isLetter() }.firstOrNull()?.toString()?.uppercase() ?: "P"
-
-                                // Ảnh đại diện chữ cái đầu và Tên User
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFFA3B70)), // Màu hồng cá tính
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(text = firstLetter, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column {
-                                        Text("Xin chào,", color = Color.LightGray, fontSize = 13.sp)
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(text = userName, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
+                                // GỌI BANNER TẠI ĐÂY
+                                HomeBannerCarousel(user = user)
 
                                 Spacer(modifier = Modifier.height(24.dp))
 
-                                // Hàng Thống kê (Chi tiêu, Thu nhập, Số dư)
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val darkColor = Color(0xFF2D3436)
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Chi tiêu", color = Color.LightGray, fontSize = 12.sp)
+                                        Text(text = "Chi tiêu", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(formatMoney.format(totalExpenseAll), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalExpenseAll), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Thu nhập", color = Color.LightGray, fontSize = 12.sp)
+                                        Text(text = "Thu nhập", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(formatMoney.format(totalIncomeAll), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalIncomeAll), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Số dư", color = Color.LightGray, fontSize = 12.sp)
+                                        Text(text = "Số dư", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(formatMoney.format(totalBalance), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalBalance), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // --- BODY: MÀN HÌNH MÀU TRẮNG BO GÓC CHỒNG LÊN ---
                             Surface(
                                 modifier = Modifier.fillMaxSize(),
                                 shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
                                 color = bgColor
                             ) {
                                 Column(modifier = Modifier.padding(top = 24.dp, start = 16.dp, end = 16.dp)) {
-
-                                    // Bộ lọc Tiền mặt / Chuyển khoản
+                                    if (selectedDateFilter != null) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        ) {
+                                            Text(text = "Đang lọc ngày: ", color = Color.Gray, fontSize = 13.sp)
+                                            AssistChip(
+                                                onClick = { selectedDateFilter = null },
+                                                label = {
+                                                    Text(
+                                                        text = "${selectedDateFilter?.dayOfMonth}/${selectedDateFilter?.monthValue}",
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                },
+                                                trailingIcon = {
+                                                    Icon(Icons.Default.Clear, contentDescription = "Xóa", modifier = Modifier.size(16.dp))
+                                                },
+                                                colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF4DD0E1), labelColor = Color.White)
+                                            )
+                                        }
+                                    }
                                     LazyRow(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
+
                                     ) {
-                                        items(filters) { filter ->
+                                        // Sử dụng lazyItems để tránh lỗi xung đột thư viện
+                                        lazyItems(items = filters) { filter ->
                                             val isSelected = selectedFilter == filter
                                             Box(
                                                 modifier = Modifier
@@ -233,56 +299,34 @@ fun HomeScreen(
                                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Text(
-                                                    text = filter,
-                                                    color = if (isSelected) Color.Black else Color.Gray,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                    fontSize = 13.sp
-                                                )
+                                                Text(text = filter, color = if (isSelected) Color.Black else Color.Gray, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
                                             }
                                         }
                                     }
 
                                     Spacer(modifier = Modifier.height(16.dp))
 
-                                    // Hiển thị ngày đang được lọc
-                                    if (selectedDateFilter != null) {
-                                        Surface(
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = Color(0xFF4DD0E1).copy(alpha = 0.2f),
-                                            onClick = { selectedDateFilter = null },
-                                            modifier = Modifier.padding(bottom = 12.dp)
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                            ) {
-                                                Text(
-                                                    text = selectedDateFilter!!.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                                                    color = Color(0xFF4DD0E1),
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Icon(Icons.Default.Clear, contentDescription = "Xóa lọc", tint = Color(0xFF4DD0E1), modifier = Modifier.size(14.dp))
-                                            }
-                                        }
-                                    }
-
-                                    // Hiển thị danh sách dạng Grid (2 cột)
                                     if (displayedTransactions.isEmpty()) {
                                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                            Text("Không có giao dịch nào.", color = Color.Gray)
+                                            Text(text = "Không có giao dịch nào.", color = Color.Gray)
                                         }
                                     } else {
                                         LazyVerticalGrid(
-                                            columns = GridCells.Fixed(2), // Lưới 2 cột giống ảnh
+                                            columns = GridCells.Fixed(2),
                                             contentPadding = PaddingValues(bottom = 100.dp),
                                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                                             verticalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            items(displayedTransactions) { trans ->
-                                                TransactionGridItem(trans, formatMoney, cardColor, textColor)
+                                            // Sử dụng gridItems để tránh lỗi xung đột
+                                            gridItems(items = displayedTransactions) { trans ->
+                                                TransactionGridItem(
+                                                    transaction = trans,
+                                                    formatMoney = formatMoney,
+                                                    cardColor = cardColor,
+                                                    textColor = textColor,
+                                                    onEdit = { viewModel.transactionToEdit = trans; onNavigateToAdd() },
+                                                    onDelete = { viewModel.deleteTransaction(trans.id) }
+                                                )
                                             }
                                         }
                                     }
@@ -291,17 +335,73 @@ fun HomeScreen(
                         }
                     }
 
-                    1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date ->
-                        selectedDateFilter = date
-                        selectedTab = 0
-                    })
+                    1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date -> selectedDateFilter = date; selectedTab = 0 })
                     2 -> AddTransactionScreen(viewModel = viewModel, onNavigateBack = { selectedTab = 0 })
                     3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
-                    4 -> ProfileScreen(
-                        user = user,
-                        onLogout = onLogout,
-                        onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen }
-                    )
+                    4 -> ProfileScreen(user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
+                }
+            }
+
+            // HỘP THOẠI TRỢ LÝ AI
+            if (showAIModal) {
+                ModalBottomSheet(
+                    onDismissRequest = { showAIModal = false; viewModel.resetAIState() },
+                    sheetState = sheetState,
+                    containerColor = cardColor
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp, start = 16.dp, end = 16.dp).imePadding()) {
+                        Text(text = "✨ Trợ lý Tài chính WalletWise", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        if (viewModel.isAIProcessing) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF4DD0E1))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(text = "Trợ lý đang suy nghĩ...", color = Color.Gray)
+                            }
+                        } else {
+                            Text(text = viewModel.aiFeedbackMessage, fontSize = 16.sp, color = Color(0xFFFA3B70), fontWeight = FontWeight.Medium)
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        if (viewModel.aiPendingTransaction != null) {
+                            val tx = viewModel.aiPendingTransaction!!
+                            val context = LocalContext.current
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF4DD0E1).copy(alpha = 0.1f),
+                                border = BorderStroke(1.dp, Color(0xFF4DD0E1).copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(text = "📝 Giao dịch mới:", fontWeight = FontWeight.Bold, color = textColor)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(text = "• Số tiền: ${formatMoney.format(tx.amount)}", color = textColor)
+                                    Text(text = "• Phân loại: ${tx.category} (${tx.type})", color = textColor)
+                                    Text(text = "• Nguồn: ${tx.paymentMethod}", color = textColor)
+                                    Text(text = "• Ghi chú: ${tx.note}", color = textColor)
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = {
+                                            viewModel.addTransaction(
+                                                amount = tx.amount, type = tx.type, category = tx.category,
+                                                note = tx.note, paymentMethod = tx.paymentMethod, imageUri = null, context = context
+                                            ) { showAIModal = false; viewModel.resetAIState() }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                    ) {
+                                        Text(text = "Xác nhận & Lưu", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        AIAssistantInputBar(textColor = textColor, onSend = { userInput -> viewModel.processAITransaction(userInput) })
+                    }
                 }
             }
 
@@ -313,11 +413,11 @@ fun HomeScreen(
                     text = { Text(text = "Bạn có chắc chắn muốn đăng xuất khỏi WalletWise không?", color = textColor, fontSize = 16.sp) },
                     confirmButton = {
                         Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) {
-                            Text("Đăng xuất", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(text = "Đăng xuất", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showLogoutDialog = false }) { Text("Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) }
+                        TextButton(onClick = { showLogoutDialog = false }) { Text(text = "Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) }
                     }
                 )
             }
@@ -326,98 +426,143 @@ fun HomeScreen(
 }
 
 @Composable
+fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
+    var textInput by remember { mutableStateOf(TextFieldValue("")) }
+    val context = LocalContext.current
+    val speechLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (spokenText != null) { textInput = TextFieldValue(spokenText) }
+        }
+    }
+    fun startListening() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Đang nghe... (VD: Đổ xăng 50k)")
+        }
+        try { speechLauncher.launch(intent) } catch (e: Exception) { android.widget.Toast.makeText(context, "Thiết bị không hỗ trợ giọng nói", android.widget.Toast.LENGTH_SHORT).show() }
+    }
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = textInput, onValueChange = { textInput = it }, modifier = Modifier.weight(1f),
+            placeholder = { Text(text = "Nhập nội dung...", color = Color.Gray) }, shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF9C27B0), unfocusedBorderColor = Color.LightGray, focusedTextColor = textColor, unfocusedTextColor = textColor), maxLines = 4
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        if (textInput.text.isBlank()) {
+            IconButton(onClick = { startListening() }, modifier = Modifier.size(50.dp).background(Color(0xFFFA3B70), CircleShape)) { Icon(Icons.Default.Mic, contentDescription = "Mic", tint = Color.White) }
+        } else {
+            IconButton(onClick = { onSend(textInput.text); textInput = TextFieldValue("") }, modifier = Modifier.size(50.dp).background(Color(0xFF4CAF50), CircleShape)) { Icon(Icons.Default.Send, contentDescription = "Gửi", tint = Color.White) }
+        }
+    }
+}
+
+@Composable
 fun BottomBarItem(icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(if (isSelected) Color(0xFFFFD700) else Color.Transparent)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(if (isSelected) Color(0xFFFFD700) else Color.Transparent).clickable { onClick() }, contentAlignment = Alignment.Center) {
         Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
     }
 }
 
-// 👉 HÀM MỚI: Vẽ Card Giao Dịch Dạng Lưới có nền Gradient Pastel
 @Composable
-fun TransactionGridItem(transaction: Transaction, formatMoney: NumberFormat, cardColor: Color, textColor: Color) {
+fun TransactionGridItem(
+    transaction: Transaction,
+    formatMoney: NumberFormat,
+    cardColor: Color,
+    textColor: Color,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     val isIncome = transaction.type == "Thu"
     val sign = if (isIncome) "+" else "-"
-    // Màu chữ số tiền tùy thuộc Thu/Chi
     val amountColor = if (isIncome) Color(0xFF4CAF50) else textColor
-
     val sdfTime = java.text.SimpleDateFormat("HH:mm", Locale("vi", "VN"))
     val timeString = sdfTime.format(java.util.Date(transaction.timestamp))
+    val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale("vi", "VN"))
+    val fullDateString = sdfFullDate.format(java.util.Date(transaction.timestamp))
+    var showMenu by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showDetailsDialog by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { showDetailsDialog = true }, colors = CardDefaults.cardColors(containerColor = cardColor), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF0F0F0)), // Màu nền nhẹ nhàng
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFF0F0F0)), contentAlignment = Alignment.Center) {
                 if (!transaction.imageUrl.isNullOrEmpty()) {
-                    // Hiển thị ảnh thật từ Firebase
-                    AsyncImage(
-                        model = transaction.imageUrl,
-                        contentDescription = "Ảnh giao dịch",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    // Nếu không có ảnh thì hiện icon hoặc text mặc định
-                    Text("Không có ảnh", fontSize = 10.sp, color = Color.Gray)
+                    AsyncImage(model = transaction.imageUrl, contentDescription = "Ảnh", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                } else { Text(text = "Không có ảnh", fontSize = 10.sp, color = Color.Gray) }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "$sign${formatMoney.format(transaction.amount)}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = amountColor)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = transaction.category, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
+                }
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, contentDescription = "Tùy chọn", tint = Color.Gray) }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, modifier = Modifier.background(Color.White)) {
+                        DropdownMenuItem(text = { Text(text = "Sửa", color = Color.Black) }, onClick = { showMenu = false; onEdit() })
+                        DropdownMenuItem(text = { Text(text = "Xóa", color = Color.Red) }, onClick = { showMenu = false; showDeleteDialog = true })
+                    }
                 }
             }
-
             Spacer(modifier = Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(text = timeString, fontSize = 11.sp, color = Color.Gray)
+                Surface(color = Color.LightGray.copy(alpha = 0.2f), shape = RoundedCornerShape(12.dp)) {
+                    Text(text = transaction.paymentMethod, fontSize = 10.sp, color = Color.DarkGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                }
+            }
+        }
+    }
 
-            // Số tiền
-            Text(
-                text = "$sign${formatMoney.format(transaction.amount)}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                color = amountColor
-            )
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false }, containerColor = cardColor,
+            title = { Text(text = "Xác nhận xóa", fontWeight = FontWeight.Bold, color = textColor) },
+            text = { Text(text = "Bạn có chắc chắn muốn xóa giao dịch này không?", color = textColor, fontSize = 16.sp) },
+            confirmButton = { Button(onClick = { showDeleteDialog = false; onDelete() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) { Text(text = "Xóa", color = Color.White, fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text(text = "Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) } }
+        )
+    }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Tên danh mục (Ghi chú / Thể loại)
-            Text(
-                text = transaction.category,
-                fontSize = 12.sp,
-                color = Color.Gray,
-                maxLines = 1
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Hàng dưới cùng: Giờ + Nhãn Wallet (Momo, Wallet...)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(timeString, fontSize = 11.sp, color = Color.Gray)
-                Surface(
-                    color = Color.LightGray.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = transaction.paymentMethod,
-                        fontSize = 10.sp,
-                        color = Color.DarkGray,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+    if (showDetailsDialog) {
+        Dialog(onDismissRequest = { showDetailsDialog = false }) {
+            Surface(shape = RoundedCornerShape(24.dp), color = cardColor, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Chi tiết", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        IconButton(onClick = { showDetailsDialog = false }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Clear, contentDescription = "Đóng", tint = Color.Gray) }
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    if (!transaction.imageUrl.isNullOrEmpty()) {
+                        AsyncImage(model = transaction.imageUrl, contentDescription = "Hóa đơn", modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+                    Text(text = "$sign${formatMoney.format(transaction.amount)}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = amountColor)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Column(modifier = Modifier.fillMaxWidth().background(Color.Gray.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(16.dp)) {
+                        @Composable
+                        fun InfoRow(label: String, value: String, valueColor: Color = textColor) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = label, color = Color.Gray, fontSize = 14.sp)
+                                Text(text = value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+                            }
+                        }
+                        InfoRow("Loại giao dịch", transaction.type, amountColor)
+                        InfoRow("Danh mục", transaction.category)
+                        InfoRow("Nguồn tiền", transaction.paymentMethod)
+                        InfoRow("Thời gian", fullDateString)
+                        if (transaction.note.isNotBlank()) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(text = "Ghi chú:", color = Color.Gray, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(text = transaction.note, color = textColor, fontSize = 14.sp)
+                            }
+                        }
+                    }
                 }
             }
         }

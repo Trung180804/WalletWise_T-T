@@ -1,5 +1,6 @@
 package com.example.walletwise.presentation.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,8 +92,11 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
 
     LaunchedEffect(selectedTimeTab) { timeOffset = 0 }
 
-    val darkBgColor = Color(0xFF121212)
-    val cardColor = Color(0xFF1E1E1E)
+    val bgColor = Color(0xFFF5F7FA) // Nền nhạt
+    val cardColor = Color.White      // Thẻ trắng
+    val textColor = Color(0xFF2D3436) // Chữ xám đậm
+    val primaryBlue = Color(0xFF2196F3) // Xanh chủ đạo
+    val grayText = Color(0xFF636E72)
 
     val timeData = remember(selectedTimeTab, timeOffset) {
         val calendar = Calendar.getInstance()
@@ -216,8 +221,8 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            containerColor = Color(0xFF2A2A2A),
-            title = { Text("Chọn thời gian", color = Color.White, fontWeight = FontWeight.Bold) },
+            containerColor = Color.White,
+            title = { Text("Chọn thời gian", color = textColor, fontWeight = FontWeight.Bold) },
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                     items(25) { index ->
@@ -225,67 +230,76 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                         val label = getTimeLabel(selectedTimeTab, offset)
                         Text(
                             text = label,
-                            color = if (offset == timeOffset) Color(0xFFFFD700) else Color.White,
+                            color = if (offset == timeOffset) primaryBlue else textColor,
                             modifier = Modifier.fillMaxWidth().clickable { timeOffset = offset; showTimePicker = false }.padding(12.dp)
                         )
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showTimePicker = false }) { Text("Đóng", color = Color(0xFFFFD700)) } }
+            confirmButton = { TextButton(onClick = { showTimePicker = false }) { Text("Đóng", color = primaryBlue) } }
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(darkBgColor)) {
-        TabRow(selectedTabIndex = mainTab, containerColor = darkBgColor, contentColor = Color(0xFFFFD700), divider = {}) {
+    Column(modifier = Modifier.fillMaxSize().background(bgColor)) {
+        TabRow(
+            selectedTabIndex = mainTab,
+            containerColor = Color.White,
+            contentColor = primaryBlue,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(tabPositions[mainTab]), color = primaryBlue)
+            }
+        ) {
             listOf("Tổng quan", "Biểu đồ").forEachIndexed { index, title ->
                 Tab(
                     selected = mainTab == index, onClick = { mainTab = index },
-                    text = { Text(title, fontWeight = FontWeight.Bold, color = if (mainTab == index) Color(0xFFFFD700) else Color.Gray) }
+                    text = { Text(title, fontWeight = FontWeight.Bold, color = if (mainTab == index) primaryBlue else grayText) }
                 )
             }
         }
 
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().border(1.dp, Color.DarkGray, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)), horizontalArrangement = Arrangement.SpaceEvenly) {
+            // Bộ lọc Tuần/Tháng/Năm
+            Row(modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).background(Color.White), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf("Tuần", "Tháng", "Năm").forEachIndexed { index, title ->
                     Box(
-                        modifier = Modifier.weight(1f).background(if (selectedTimeTab == index) Color.White else Color.Transparent).clickable { selectedTimeTab = index }.padding(vertical = 10.dp),
+                        modifier = Modifier.weight(1f).background(if (selectedTimeTab == index) primaryBlue else Color.Transparent).clickable { selectedTimeTab = index }.padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
-                    ) { Text(text = title, color = if (selectedTimeTab == index) Color.Black else Color.White, fontWeight = if (selectedTimeTab == index) FontWeight.Bold else FontWeight.Normal) }
+                    ) { Text(text = title, color = if (selectedTimeTab == index) Color.White else grayText, fontWeight = if (selectedTimeTab == index) FontWeight.Bold else FontWeight.Normal) }
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { timeOffset -= 1 }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = Color.White) }
+                    IconButton(onClick = { timeOffset -= 1 }) { Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = textColor) }
                     Row(modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { showTimePicker = true }.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = displayLabel, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
+                        Text(text = displayLabel, color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = grayText)
                     }
-                    IconButton(onClick = { timeOffset += 1 }, enabled = timeOffset < 0, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = if (timeOffset < 0) Color.White else Color.Transparent) }
+                    IconButton(onClick = { timeOffset += 1 }, enabled = timeOffset < 0) { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = if (timeOffset < 0) textColor else Color.LightGray) }
                 }
                 Box {
-                    Surface(color = cardColor, shape = RoundedCornerShape(12.dp), onClick = { expandedDropdown = true }) {
+                    Surface(color = Color.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.LightGray), onClick = { expandedDropdown = true }) {
                         Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(txTypes[selectedTxType], color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
+                            Text(txTypes[selectedTxType], color = textColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = textColor)
                         }
                     }
-                    DropdownMenu(expanded = expandedDropdown, onDismissRequest = { expandedDropdown = false }, modifier = Modifier.background(cardColor)) {
+                    DropdownMenu(expanded = expandedDropdown, onDismissRequest = { expandedDropdown = false }, modifier = Modifier.background(Color.White)) {
                         txTypes.forEachIndexed { index, title ->
-                            DropdownMenuItem(text = { Text(title, color = Color.White) }, onClick = { selectedTxType = index; expandedDropdown = false })
+                            DropdownMenuItem(text = { Text(title, color = textColor) }, onClick = { selectedTxType = index; expandedDropdown = false })
                         }
                     }
                 }
             }
         }
-        Divider(color = Color(0xFF333333), thickness = 1.dp)
+        Divider(color = Color.LightGray, thickness = 0.5.dp)
 
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             if (mainTab == 0) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor), shape = RoundedCornerShape(16.dp)) {
+                    // Thẻ Card Tổng quan
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor), elevation = CardDefaults.cardElevation(2.dp)) {
                         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("⬇ Thu nhập", color = ColorIncome, fontWeight = FontWeight.Bold)
@@ -296,31 +310,28 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                                 Text("⬆ Chi phí", color = ColorExpense, fontWeight = FontWeight.Bold)
                                 Text("-${formatMoney.format(totalExpense)}", color = ColorExpense, fontWeight = FontWeight.Bold)
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Divider(color = Color.DarkGray)
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray)
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Số dư", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text(formatMoney.format(balance), color = if (balance >= 0) Color.White else ColorExpense, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("Số dư", color = textColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text(formatMoney.format(balance), color = if (balance >= 0) primaryBlue else ColorExpense, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("Chi tiết theo danh mục", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Chi tiết theo danh mục", color = textColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
 
                 if (categoryTotals.isEmpty()) {
-                    item { Text("Chưa có dữ liệu", color = Color.Gray, modifier = Modifier.padding(top = 16.dp)) }
+                    item { Text("Chưa có dữ liệu", color = textColor, modifier = Modifier.padding(top = 16.dp)) }
                 } else {
                     items(categoryTotals.size) { index ->
-                        CategoryProgressItem(categoryTotals[index], totalIncome, totalExpense, formatMoney, index)
+                        CategoryProgressItem(categoryTotals[index], totalIncome, totalExpense, formatMoney, index, textColor)
                     }
                 }
             } else {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(if (selectedTxType == 0) "Tỷ lệ Thu / Chi" else "Chi tiết theo danh mục", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(if (selectedTxType == 0) "Tỷ lệ Thu / Chi" else "Chi tiết theo danh mục", color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
@@ -328,7 +339,7 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text(chartTitle, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(chartTitle, color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Card(modifier = Modifier.fillMaxWidth().height(220.dp), colors = CardDefaults.cardColors(containerColor = cardColor)) {
@@ -336,7 +347,7 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("Xu hướng (Đường)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Xu hướng (Đường)", color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Card(modifier = Modifier.fillMaxWidth().height(220.dp), colors = CardDefaults.cardColors(containerColor = cardColor)) {
@@ -369,7 +380,7 @@ fun ChartLegend(typeFilter: Int) {
 }
 
 @Composable
-fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Double, totalExpense: Double, formatMoney: NumberFormat, index: Int) {
+fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Double, totalExpense: Double, formatMoney: NumberFormat, index: Int, textColor: Color) {
     val isIncome = item.second == "Thu"
     val sign = if (isIncome) "+" else "-"
     val amountColor = if (isIncome) ColorIncome else ColorExpense
@@ -386,11 +397,11 @@ fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Doub
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${item.first}  ${String.format("%.1f%%", percentage * 100)}", color = Color.White, fontSize = 14.sp)
+                Text("${item.first}  ${String.format("%.1f%%", percentage * 100)}", color = textColor, fontSize = 14.sp)
                 Text("$sign${formatMoney.format(item.third)}", color = amountColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            LinearProgressIndicator(progress = { percentage }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = barColor, trackColor = Color(0xFF333333))
+            LinearProgressIndicator(progress = { percentage }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = barColor, trackColor = Color(0xFFEEEEEE))
         }
     }
 }
@@ -479,7 +490,7 @@ fun SimpleBarChart(data: List<StatChartPoint>, typeFilter: Int) {
 
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    val gridColor = Color.DarkGray.copy(alpha = 0.5f)
+                    val gridColor = Color.LightGray
                     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
 
                     drawLine(color = gridColor, start = Offset(0f, 0f), end = Offset(size.width, 0f), pathEffect = dashEffect)
