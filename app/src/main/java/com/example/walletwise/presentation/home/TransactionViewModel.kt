@@ -1,15 +1,22 @@
 package com.example.walletwise.presentation.home
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.walletwise.data.repository.TransactionRepositoryImpl
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.repository.TransactionRepository
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 class TransactionViewModel(
     private val repository: TransactionRepository = TransactionRepositoryImpl()
@@ -19,22 +26,96 @@ class TransactionViewModel(
     private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
     val transactions: StateFlow<List<Transaction>> = _transactions.asStateFlow()
 
+    // 👉 STATE FLOW ĐỂ LƯU SỐ STREAK HIỂN THỊ LÊN UI
+    private val _streakCount = MutableStateFlow(0)
+    val streakCount: StateFlow<Int> = _streakCount.asStateFlow()
+
+    private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
+
     init {
         loadTransactions()
-        // 👉 Gọi hàm bơm dữ liệu test
         checkAndGenerateFakeData()
+
+        // Gọi hàm tính toán Streak ngay khi khởi tạo
+        calculateAndGetStreak()
+    }
+
+    // --- LOGIC TÍNH TOÁN STREAK (LỬA) ---
+    private fun calculateAndGetStreak() {
+        val currentUser = auth.currentUser ?: return
+
+        val today = LocalDate.now()
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val todayStr = today.format(formatter)
+
+        val userRef = db.collection("USERS").document(currentUser.uid)
+
+        userRef.get().addOnSuccessListener { document ->
+            if (document.exists()) {
+                val lastActiveStr = document.getString("lastActiveDate")
+                var currentStreak = document.getLong("streakCount")?.toInt() ?: 0
+
+                if (lastActiveStr == null) {
+                    // Lần đầu sử dụng app
+                    currentStreak = 1
+                    updateStreakToFirebase(userRef, todayStr, currentStreak)
+                } else {
+                    try {
+                        val lastActiveDate = LocalDate.parse(lastActiveStr, formatter)
+                        val daysBetween = ChronoUnit.DAYS.between(lastActiveDate, today)
+
+                        when {
+                            daysBetween == 0L -> {
+                                // Đã mở app hôm nay rồi, giữ nguyên streak
+                                _streakCount.value = currentStreak
+                            }
+                            daysBetween == 1L -> {
+                                // Mở app liên tiếp, tăng streak
+                                currentStreak += 1
+                                updateStreakToFirebase(userRef, todayStr, currentStreak)
+                            }
+                            daysBetween > 1L -> {
+                                // Bỏ lỡ 1 ngày trở lên -> Chuỗi đứt, quay về 1
+                                currentStreak = 1
+                                updateStreakToFirebase(userRef, todayStr, currentStreak)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("StreakLogic", "Lỗi format ngày tháng: ${e.message}")
+                        // Bị lỗi format -> Khởi tạo lại chuỗi = 1
+                        updateStreakToFirebase(userRef, todayStr, 1)
+                    }
+                }
+            } else {
+                // Document USERS chưa tồn tại -> Tạo mới với streak = 1
+                updateStreakToFirebase(userRef, todayStr, 1)
+            }
+        }.addOnFailureListener { e ->
+            Log.e("StreakLogic", "Lỗi lấy dữ liệu Streak: ${e.message}")
+        }
+    }
+
+    private fun updateStreakToFirebase(userRef: com.google.firebase.firestore.DocumentReference, todayStr: String, streak: Int) {
+        val updates = mapOf(
+            "lastActiveDate" to todayStr,
+            "streakCount" to streak
+        )
+        userRef.set(updates, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                // Cập nhật StateFlow để UI tự động đổi
+                _streakCount.value = streak
+            }
     }
 
     // --- HÀM BƠM DATA GIẢ (Dùng để test giao diện Lịch) ---
     private fun checkAndGenerateFakeData() {
-        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
 
         // Thay đúng email bạn dùng để test
         val targetEmail = "sniper021003@gmail.com"
         if (currentUser == null || currentUser.email != targetEmail) return
 
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
         db.collection("TRANSACTIONS")
             .whereEqualTo("userId", currentUser.uid)
             .limit(1)
@@ -46,7 +127,7 @@ class TransactionViewModel(
             }
     }
 
-    private fun generateDataForUser(db: com.google.firebase.firestore.FirebaseFirestore, uid: String) {
+    private fun generateDataForUser(db: FirebaseFirestore, uid: String) {
         val sampleImages = listOf(
             "https://picsum.photos/id/42/300/300",
             "https://picsum.photos/id/163/300/300",
@@ -61,7 +142,7 @@ class TransactionViewModel(
             val randomDay = (1..currentMonth.lengthOfMonth()).random()
             val date = currentMonth.atDay(randomDay)
             val timestamp = date.atTime((8..20).random(), (0..59).random())
-                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
             val txId = java.util.UUID.randomUUID().toString()
 
@@ -77,7 +158,6 @@ class TransactionViewModel(
             )
 
             db.collection("TRANSACTIONS").document(txId).set(fakeTx)
-
         }
         loadTransactions()
     }
@@ -93,7 +173,6 @@ class TransactionViewModel(
         }
     }
 
-    // 👉 1. Thêm tham số paymentMethod: String vào đây
     fun addTransaction(
         amount: Double,
         type: String,
@@ -105,7 +184,6 @@ class TransactionViewModel(
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
-            // 👉 2. Nhét paymentMethod vào trong Transaction
             val trans = Transaction(
                 amount = amount,
                 type = type,
@@ -117,6 +195,10 @@ class TransactionViewModel(
             repository.addTransaction(trans, imageUri, context)
                 .onSuccess {
                     loadTransactions()
+
+                    // Cập nhật lại streak nếu cần (khi user thêm giao dịch cũng là một hành động mở app)
+                    calculateAndGetStreak()
+
                     onSuccess()
                 }
         }
