@@ -72,6 +72,8 @@ fun AddTransactionScreen(
     val bgColor = Color(0xFFF8F9FA)
     val currentCategories = if (type == "Chi") expenseCategories else incomeCategories
 
+    val isLoading by viewModel.isLoading.collectAsState()
+
     LaunchedEffect(type) {
         if (currentCategories.none { it.name == category }) {
             category = currentCategories[0].name
@@ -161,11 +163,14 @@ fun AddTransactionScreen(
                     .clickable { launchCamera() },
                 contentAlignment = Alignment.Center
             ) {
-                if (capturedImageUri != null) {
+                val imageToShow = capturedImageUri ?: txToEdit?.imageUrl
+                if (imageToShow != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(capturedImageUri),
+                        painter = rememberAsyncImagePainter(imageToShow),
                         contentDescription = "Hóa đơn",
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(24.dp)),
                         contentScale = ContentScale.Crop
                     )
                 } else {
@@ -280,17 +285,21 @@ fun AddTransactionScreen(
 
             // Nút Lưu
             Button(
+                enabled = !isLoading,
                 onClick = {
                     val amountValue = amount.toDoubleOrNull() ?: 0.0
 
                     if (isEditMode) {
                         viewModel.updateTransaction(
-                            transactionId = txToEdit!!.id,
-                            amount = amountValue,
-                            type = type,
-                            category = category,
-                            note = note,
-                            paymentMethod = selectedWallet
+                            transaction = txToEdit!!.copy(
+                                amount = amountValue,
+                                type = type,
+                                category = category,
+                                note = note,
+                                paymentMethod = selectedWallet
+                            ),
+                            imageUri = capturedImageUri,
+                            context = context
                         ) {
                             handleBack()
                         }

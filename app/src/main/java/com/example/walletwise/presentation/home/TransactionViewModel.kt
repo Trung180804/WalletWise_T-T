@@ -33,6 +33,9 @@ class TransactionViewModel(
     private val _userProfile = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
     val userProfile: StateFlow<com.example.walletwise.domain.model.User?> = _userProfile.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+
     // Biến lưu trữ giao dịch đang được chọn để Sửa
     var transactionToEdit by mutableStateOf<Transaction?>(null)
 
@@ -246,6 +249,8 @@ class TransactionViewModel(
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
+            _isLoading.value = true
+
             val trans = Transaction(
                 amount = amount,
                 type = type,
@@ -260,46 +265,56 @@ class TransactionViewModel(
                     loadTransactions()
                     onSuccess()
                 }
+                .onFailure {
+                    android.util.Log.e(
+                        "ADD_TRANSACTION",
+                        "ERROR",
+                        it
+                    )
+                }
+            _isLoading.value = false
         }
     }
 
     // Hàm Xóa giao dịch
     fun deleteTransaction(transactionId: String) {
-        val db = FirebaseFirestore.getInstance()
-        // Lưu ý nhỏ: Việc xóa dữ liệu ở đây được xử lý qua SDK Firestore.
-        // Đối với các API phụ trợ/tùy chỉnh khác xử lý việc xóa dữ liệu nhạy cảm,
-        // luôn đảm bảo sử dụng phương thức POST thay vì GET nhé.
-        db.collection("TRANSACTIONS").document(transactionId).delete()
-            .addOnSuccessListener {
-                loadTransactions()
-            }
+        viewModelScope.launch {
+            repository.deleteTransaction(transactionId)
+                .onSuccess {
+                    val currentList = _transactions.value.toMutableList()
+                    currentList.removeAll { it.id == transactionId }
+                    _transactions.value = currentList
+
+                    loadTransactions()
+                }
+        }
     }
 
-    // Hàm Cập nhật (Sửa) giao dịch
+    // Hàm Cập nhật (Sửa) giao dịch (Sửa lại)
     fun updateTransaction(
-        transactionId: String,
-        amount: Double,
-        type: String,
-        category: String,
-        note: String,
-        paymentMethod: String,
+        transaction: Transaction,
+        imageUri: Uri?,
+        context: Context,
         onSuccess: () -> Unit
     ) {
-        val db = FirebaseFirestore.getInstance()
-        val updates = mapOf(
-            "amount" to amount,
-            "type" to type,
-            "category" to category,
-            "note" to note,
-            "paymentMethod" to paymentMethod
-        )
+        viewModelScope.launch {
+            _isLoading.value = true
 
-        db.collection("TRANSACTIONS").document(transactionId).update(updates)
-            .addOnSuccessListener {
-                loadTransactions()
-                transactionToEdit = null
-                onSuccess()
-            }
+            repository.updateTransaction(transaction, imageUri, context)
+                .onSuccess {
+                    updateUserStreak()
+                    loadTransactions()
+                    onSuccess()
+                }
+                .onFailure {
+                    android.util.Log.e(
+                        "ADD_TRANSACTION",
+                        "ERROR",
+                        it
+                    )
+                }
+            _isLoading.value = false
+        }
     }
 
     // Hàm lấy dữ liệu User

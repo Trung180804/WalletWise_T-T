@@ -47,11 +47,17 @@ fun HomeBannerCarousel(user: User?) {
     val pagerState = rememberPagerState(pageCount = { pages })
 
     // Auto slide mỗi 5 giây
-    LaunchedEffect(Unit) {
+    LaunchedEffect(pagerState) {
         while (true) {
             delay(5000)
-            val nextPage = (pagerState.currentPage + 1) % pages
-            pagerState.animateScrollToPage(nextPage)
+
+            if (pagerState.currentPage == pages - 1) {
+                pagerState.scrollToPage(0)
+            } else {
+                pagerState.animateScrollToPage(
+                    pagerState.currentPage + 1
+                )
+            }
         }
     }
 
