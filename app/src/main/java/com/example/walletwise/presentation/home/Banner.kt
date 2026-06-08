@@ -62,12 +62,11 @@ fun HomeBannerCarousel(user: User?) {
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // 👉 Đã sửa lỗi đỏ 2: Bỏ pageCount ở đây đi
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(190.dp)
+                .height(120.dp)
         ) { page ->
 
             AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically()) {

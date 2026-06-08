@@ -76,7 +76,7 @@ fun ProfileScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
         when (currentRoute) {
-            ProfileRoute.MAIN -> MainProfileView(onLogout, user) { currentRoute = it }
+            ProfileRoute.MAIN -> MainProfileView(user, onLogout) { currentRoute = it }
             ProfileRoute.EDIT_PROFILE -> EditProfileView(user = user) { currentRoute = ProfileRoute.MAIN }
             ProfileRoute.SETTINGS -> SettingsMainView(onNavigate = { currentRoute = it }, onBack = { currentRoute = ProfileRoute.MAIN })
             ProfileRoute.FONT_SIZE -> FontSizeView { currentRoute = ProfileRoute.SETTINGS }
@@ -91,71 +91,149 @@ fun ProfileScreen(
     }
 }
 
+// ================================================================
+// 1. MÀN HÌNH CHÍNH PROFILE
+// ================================================================
+
 @Composable
 fun MainProfileView(
+    user: com.example.walletwise.domain.model.User?, // 👉 Trả lại tham số user để khớp với dòng 79
     onLogout: () -> Unit,
-    user: com.example.walletwise.domain.model.User?,
     onNavigate: (ProfileRoute) -> Unit
 ) {
-    val userName = user?.username?.takeIf { it.isNotBlank() } ?: "Người dùng"
+    val isLoggedIn = user != null // Kiểm tra trạng thái đăng nhập qua biến user
+
     val email = user?.email ?: "Chưa đăng nhập"
-    val firstLetter = userName.filter { it.isLetter() }.firstOrNull()?.toString()?.uppercase() ?: "U"
+    // Lấy ký tự đầu của email làm Avatar, nếu chưa đăng nhập thì để chữ "N"
+    val firstLetter = email.firstOrNull()?.uppercase() ?: "N"
+
     val isDark = LocalAppTheme.current.value
-    val textC = if (isDark) Color.White else Color.Black
+    val textC  = if (isDark) Color.White else Color.Black
+
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(32.dp))
+
+        // Avatar
         Box(
-            modifier = Modifier.size(90.dp).clip(CircleShape).background(Color(0xFFE91E63)),
+            modifier = Modifier
+                .size(90.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFE91E63)),
             contentAlignment = Alignment.Center
         ) {
             Text(firstLetter, color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
         }
+
         Spacer(Modifier.height(16.dp))
-        Text(userName, color = textC, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        val displayName = user?.username?.takeIf { it.isNotBlank() } ?: "Thành viên"
+        Text(
+            text = if (isLoggedIn) displayName else "Người dùng",
+            color = textC,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold
+        )
         Text(email, color = Color.Gray, fontSize = 14.sp)
         Spacer(Modifier.height(32.dp))
 
-        MenuRowItem(Icons.Default.Person, "Hồ sơ") { onNavigate(ProfileRoute.EDIT_PROFILE) }
-        MenuRowItem(Icons.Default.Refresh, "Quy đổi mệnh giá tiền") { onNavigate(ProfileRoute.CURRENCY) }
-        MenuRowItem(Icons.Default.Settings, "Cài đặt") { onNavigate(ProfileRoute.SETTINGS) }
-        MenuRowItem(Icons.Default.Info, "Về chúng tôi") { onNavigate(ProfileRoute.ABOUT_US) }
+        // Menu items
+        MenuRowItem(Icons.Default.Person,  "Hồ sơ")                    { onNavigate(ProfileRoute.EDIT_PROFILE) }
+        MenuRowItem(Icons.Default.Refresh, "Quy đổi tiền tệ")   { onNavigate(ProfileRoute.CURRENCY) }
+        MenuRowItem(Icons.Default.Settings,"Cài đặt")                  { onNavigate(ProfileRoute.SETTINGS) }
+        MenuRowItem(Icons.Default.Share,   "Giới thiệu cho bạn bè")   { /* share intent */ }
+        MenuRowItem(Icons.Default.Info,    "Về chúng tôi")             { onNavigate(ProfileRoute.ABOUT_US) }
 
         Spacer(Modifier.height(32.dp))
-        Button(
-            onClick = { showLogoutDialog = true },
-            modifier = Modifier.fillMaxWidth().height(55.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color(0xFF333333) else Color(0xFFE0E0E0)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Text("Đăng xuất", color = Color(0xFFFA3B70), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
-    }
 
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = { Text("Đăng xuất") },
-            text = { Text("Bạn có chắc chắn muốn đăng xuất?") },
-            confirmButton = {
-                Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFA3B70))) {
-                    Text("Đăng xuất")
+        // 👉 LOGIC NÚT ĐĂNG NHẬP / ĐĂNG XUẤT CHUẨN UX
+        Button(
+            onClick  = {
+                if (isLoggedIn) {
+                    showLogoutDialog = true
+                } else {
+                    onLogout() // Gọi hàm này để quay về trang Login
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) { Text("Hủy") }
+            modifier = Modifier.fillMaxWidth().height(55.dp),
+            colors   = ButtonDefaults.buttonColors(
+                containerColor = if (isDark) Color(0xFF333333) else Color(0xFFE0E0E0)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                text = if (isLoggedIn) "Đăng xuất" else "Đăng nhập",
+                color = if (isLoggedIn) Color(0xFFFA3B70) else Color(0xFF00C875),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(Modifier.height(100.dp))
+    }
+
+    // ── HỘP THOẠI XÁC NHẬN ĐĂNG XUẤT ──
+    if (showLogoutDialog && isLoggedIn) {
+        Dialog(onDismissRequest = { showLogoutDialog = false }) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isDark) Color(0xFF1E1E1E) else Color.White
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Đăng xuất", color = Color(0xFFFA3B70), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(16.dp))
+
+                    Text(
+                        "Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?",
+                        color = textC,
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(Modifier.height(24.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { showLogoutDialog = false },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = CircleShape
+                        ) {
+                            Text("Hủy bỏ", color = textC, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(Modifier.width(12.dp))
+
+                        Button(
+                            onClick = {
+                                showLogoutDialog = false
+                                onLogout()
+                            },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFA3B70)),
+                            shape = CircleShape
+                        ) {
+                            Text("Đăng xuất", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
-        )
+        }
     }
 }
 
-// ... (Giữ nguyên các hàm còn lại: CurrencyConverterView, RemindersView, v.v. như file cũ của bạn)
 // ================================================================
-// 2. QUY ĐỔI NGOẠI TỆ — Calculator có xử lý operator đầy đủ
+// 2. QUY ĐỔI NGOẠI TỆ
 // ================================================================
 data class CurrencyItem(val name: String, val code: String, val rateToUsd: Double)
 

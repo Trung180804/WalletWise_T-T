@@ -3,11 +3,15 @@ package com.example.walletwise.presentation.home
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -112,7 +116,6 @@ fun AddTransactionScreen(
 
     Scaffold(
         containerColor = Color.White,
-        // 👉 THÊM THANH ĐIỀU HƯỚNG Ở ĐÂY
         topBar = {
             TopAppBar(
                 title = {
@@ -123,7 +126,7 @@ fun AddTransactionScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { handleBack() }) { // Bấm vào là gọi handleBack để dọn dẹp và thoát
+                    IconButton(onClick = { handleBack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại")
                     }
                 },
@@ -141,24 +144,17 @@ fun AddTransactionScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Tab Chọn Chi Tiêu / Thu Nhập
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(bgColor, RoundedCornerShape(24.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TabButton(text = "Chi tiêu", isSelected = type == "Chi", activeColor = Color(0xFFFA3B70), modifier = Modifier.weight(1f)) { type = "Chi" }
-                TabButton(text = "Thu nhập", isSelected = type == "Thu", activeColor = Color(0xFF00C875), modifier = Modifier.weight(1f)) { type = "Thu" }
-            }
+            AnimatedSegmentedSlider(
+                currentType = type,
+                onTypeChange = { type = it }
+            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Khu vực Camera
             Box(
                 modifier = Modifier
-                    .size(180.dp)
+                    .size(160.dp)
                     .background(bgColor, RoundedCornerShape(24.dp))
                     .clickable { launchCamera() },
                 contentAlignment = Alignment.Center
@@ -185,7 +181,6 @@ fun AddTransactionScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
 
             // Số tiền & Wallet
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -305,6 +300,8 @@ fun AddTransactionScreen(
                         }
                     } else {
                         viewModel.addTransaction(amountValue, type, category, note, selectedWallet, capturedImageUri, context) {
+                            amount = ""
+                            note = ""
                             handleBack()
                         }
                     }
@@ -313,8 +310,7 @@ fun AddTransactionScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = mainColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                val btnText = if (isEditMode) "Cập nhật giao dịch"
-                else if (type == "Chi") "Lưu chi tiêu" else "Lưu thu nhập"
+                val btnText = if (isEditMode) "Cập nhật giao dịch" else if (type == "Chi") "Lưu chi tiêu" else "Lưu thu nhập"
                 Text(btnText, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
 
@@ -323,33 +319,80 @@ fun AddTransactionScreen(
     }
 }
 
+// 👉 COMPONENT MỚI: Thanh trượt iOS Style
 @Composable
-fun TabButton(text: String, isSelected: Boolean, activeColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun AnimatedSegmentedSlider(
+    currentType: String,
+    onTypeChange: (String) -> Unit
+) {
+    val isIncome = currentType == "Thu"
+    val activeColor = if (isIncome) Color(0xFF00C875) else Color(0xFFFA3B70)
+    val interactionSource = remember { MutableInteractionSource() }
+
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (isSelected) activeColor else Color(0xFFA9A9A9))
-            .clickable { onClick() }
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color(0xFFF0F4F8)) // Màu xám nền nhạt
+            .clickable(interactionSource = interactionSource, indication = null) {
+                onTypeChange(if (isIncome) "Chi" else "Thu")
+            }
     ) {
-        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val segmentWidth = maxWidth / 2
+
+            // Animation chạy mượt mà
+            val offset by animateDpAsState(
+                targetValue = if (isIncome) segmentWidth else 0.dp,
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                label = "sliderAnim"
+            )
+
+            // Khối màu trượt
+            Box(
+                modifier = Modifier
+                    .offset(x = offset)
+                    .width(segmentWidth)
+                    .fillMaxHeight()
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(activeColor)
+            )
+
+            // Text hiển thị
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = interactionSource, indication = null) { onTypeChange("Chi") }, contentAlignment = Alignment.Center) {
+                    Text("Chi tiêu", color = if (!isIncome) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = interactionSource, indication = null) { onTypeChange("Thu") }, contentAlignment = Alignment.Center) {
+                    Text("Thu nhập", color = if (isIncome) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+        }
     }
 }
 
 @Composable
 fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, onClick: () -> Unit) {
+    // 👉 Tinh chỉnh lại bộ màu sắc cho mềm mại
+    val unselectedBgColor = Color(0xFFF0F4F8) // Xám pastel sáng, sạch sẽ
+    val selectedBgColor = activeColor.copy(alpha = 0.15f) // Pha màu chủ đạo nhạt đi 15%
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .padding(bottom = 16.dp)
             .width(75.dp)
-            .clickable { onClick() }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() }
     ) {
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .background(if (isSelected) Color(0xFFF8F9FA) else Color(0xFFc0c0c0), RoundedCornerShape(16.dp))
+                .background(if (isSelected) selectedBgColor else unselectedBgColor, RoundedCornerShape(16.dp))
                 .border(
                     width = if (isSelected) 2.dp else 0.dp,
                     color = if (isSelected) activeColor else Color.Transparent,
@@ -359,7 +402,13 @@ fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, on
         ) {
             Text(item.icon, fontSize = 28.sp)
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(item.name, fontSize = 11.sp, color = if (isSelected) activeColor else Color.DarkGray, textAlign = TextAlign.Center, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = item.name,
+            fontSize = 11.sp,
+            color = if (isSelected) activeColor else Color.DarkGray,
+            textAlign = TextAlign.Center,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+        )
     }
 }

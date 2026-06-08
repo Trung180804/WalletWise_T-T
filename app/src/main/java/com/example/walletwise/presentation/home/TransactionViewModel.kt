@@ -2,6 +2,7 @@ package com.example.walletwise.presentation.home
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,15 +17,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONObject // 👉 Import xử lý JSON của AI
+import org.json.JSONObject
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 class TransactionViewModel(
     private val repository: TransactionRepository = TransactionRepositoryImpl()
 ) : ViewModel() {
+
+    private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
 
     // Danh sách giao dịch
     private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
@@ -36,31 +42,92 @@ class TransactionViewModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    // Lưu số Streak hiển thị lên UI
+    private val _streakCount = MutableStateFlow(0)
+    val streakCount: StateFlow<Int> = _streakCount.asStateFlow()
+
     // Biến lưu trữ giao dịch đang được chọn để Sửa
     var transactionToEdit by mutableStateOf<Transaction?>(null)
 
-    // 👉 1. CÁC BIẾN TRẠNG THÁI CHO TRỢ LÝ AI
+    // CÁC BIẾN TRẠNG THÁI CHO TRỢ LÝ AI
     val aiAssistant = TransactionAIAssistant()
     var isAIProcessing by mutableStateOf(false)
     var aiFeedbackMessage by mutableStateOf("Xin chào! Bạn vừa chi tiêu gì vậy?")
-    var aiPendingTransaction by mutableStateOf<Transaction?>(null) // Giao dịch chờ xác nhận
+    var aiPendingTransaction by mutableStateOf<Transaction?>(null)
 
     init {
         loadTransactions()
         loadUserProfile()
-        // Gọi hàm bơm dữ liệu test
         checkAndGenerateFakeData()
+        calculateAndGetStreak()
+    }
+
+    // --- LOGIC TÍNH TOÁN STREAK (LỬA) ---
+    private fun calculateAndGetStreak() {
+        val currentUser = auth.currentUser ?: return
+
+        val today = LocalDate.now()
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+        val todayStr = today.format(formatter)
+
+        val userRef = db.collection("USERS").document(currentUser.uid)
+
+        userRef.get().addOnSuccessListener { document ->
+            if (document.exists()) {
+                val lastActiveStr = document.getString("lastActiveDate")
+                var currentStreak = document.getLong("streakCount")?.toInt() ?: 0
+
+                if (lastActiveStr == null) {
+                    currentStreak = 1
+                    updateStreakToFirebase(userRef, todayStr, currentStreak)
+                } else {
+                    try {
+                        val lastActiveDate = LocalDate.parse(lastActiveStr, formatter)
+                        val daysBetween = ChronoUnit.DAYS.between(lastActiveDate, today)
+
+                        when {
+                            daysBetween == 0L -> {
+                                _streakCount.value = currentStreak
+                            }
+                            daysBetween == 1L -> {
+                                currentStreak += 1
+                                updateStreakToFirebase(userRef, todayStr, currentStreak)
+                            }
+                            daysBetween > 1L -> {
+                                currentStreak = 1
+                                updateStreakToFirebase(userRef, todayStr, currentStreak)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("StreakLogic", "Lỗi format ngày tháng: ${e.message}")
+                        updateStreakToFirebase(userRef, todayStr, 1)
+                    }
+                }
+            } else {
+                updateStreakToFirebase(userRef, todayStr, 1)
+            }
+        }.addOnFailureListener { e ->
+            Log.e("StreakLogic", "Lỗi lấy dữ liệu Streak: ${e.message}")
+        }
+    }
+
+    private fun updateStreakToFirebase(userRef: com.google.firebase.firestore.DocumentReference, todayStr: String, streak: Int) {
+        val updates = mapOf(
+            "lastActiveDate" to todayStr,
+            "streakCount" to streak
+        )
+        userRef.set(updates, com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener {
+                _streakCount.value = streak
+            }
     }
 
     // --- HÀM BƠM DATA GIẢ ---
     private fun checkAndGenerateFakeData() {
-        val auth = FirebaseAuth.getInstance()
         val currentUser = auth.currentUser
-
         val targetEmail = "sniper021003@gmail.com"
         if (currentUser == null || currentUser.email != targetEmail) return
 
-        val db = FirebaseFirestore.getInstance()
         db.collection("TRANSACTIONS")
             .whereEqualTo("userId", currentUser.uid)
             .limit(1)
@@ -73,7 +140,6 @@ class TransactionViewModel(
     }
 
     private fun generateDataForUser(db: FirebaseFirestore, uid: String) {
-        // Danh sách ảnh mẫu từ Picsum
         val sampleImages = listOf(
             "https://picsum.photos/id/42/300/300",
             "https://picsum.photos/id/163/300/300",
@@ -81,24 +147,21 @@ class TransactionViewModel(
             "https://picsum.photos/id/292/300/300",
             "https://picsum.photos/id/365/300/300"
         )
-        val streakCount = 10
+
         val now = java.time.LocalDateTime.now()
+        val currentMonth = YearMonth.now()
 
-        for (i in 0 until streakCount) {
-            val date = now.minusDays(i.toLong())
+        for (i in 1..30) {
+            val randomDay = (1..currentMonth.lengthOfMonth()).random()
+            val date = currentMonth.atDay(randomDay)
 
-            // Nếu là ngày hôm nay, chỉ được random giờ từ 0 đến giờ hiện tại
-            val maxHour = if (i == 0) now.hour else 23
+            val maxHour = if (date.dayOfMonth == now.dayOfMonth) now.hour else 23
             val randomHour = (0..maxHour).random()
-
-            // Nếu là giờ hiện tại, chỉ được random phút đến phút hiện tại
-            val maxMinute = if (i == 0 && randomHour == now.hour) now.minute else 59
+            val maxMinute = if (date.dayOfMonth == now.dayOfMonth && randomHour == now.hour) now.minute else 59
             val randomMinute = (0..maxMinute).random()
 
-            val timestamp = date.withHour(randomHour)
-                .withMinute(randomMinute)
-                .atZone(ZoneId.systemDefault())
-                .toInstant().toEpochMilli()
+            val timestamp = date.atTime(randomHour, randomMinute)
+                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
             val txId = UUID.randomUUID().toString()
             val fakeTx = hashMapOf(
@@ -114,17 +177,9 @@ class TransactionViewModel(
 
             db.collection("TRANSACTIONS").document(txId).set(fakeTx)
         }
-
-        val userRef = FirebaseFirestore.getInstance().collection("users").document(uid)
-        userRef.update(mapOf(
-            "currentStreak" to streakCount,
-            "lastRecordDate" to LocalDate.now(ZoneId.systemDefault()).toString()
-        )).addOnSuccessListener {
-            loadTransactions()
-        }
+        loadTransactions()
     }
 
-    // Hàm gọi dữ liệu từ Firebase
     fun loadTransactions() {
         viewModelScope.launch {
             repository.getTransactions()
@@ -134,47 +189,6 @@ class TransactionViewModel(
         }
     }
 
-    private fun updateUserStreak() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val db = FirebaseFirestore.getInstance()
-
-        val userRef = db.collection("users").document(uid)
-
-        userRef.get().addOnSuccessListener { document ->
-            if (document.exists()) {
-                val lastDate = document.getString("lastRecordDate") ?: ""
-                val currentStreak = document.getLong("currentStreak")?.toInt() ?: 0
-
-                // Lấy ngày hôm nay và ngày hôm qua theo định dạng chuẩn "yyyy-MM-dd"
-                val today = LocalDate.now(ZoneId.systemDefault())
-                val todayStr = today.toString()
-                val yesterdayStr = today.minusDays(1).toString()
-
-                val updates = mutableMapOf<String, Any>()
-
-                when (lastDate) {
-                    todayStr -> {
-                        // Đã ghi chép hôm nay rồi, chuỗi không đổi
-                        return@addOnSuccessListener
-                    }
-                    yesterdayStr -> {
-                        // Nối tiếp chuỗi thành công
-                        updates["currentStreak"] = currentStreak + 1
-                        updates["lastRecordDate"] = todayStr
-                    }
-                    else -> {
-                        // Đứt chuỗi (hoặc ghi chép lần đầu tiên) -> Bắt đầu lại từ 1
-                        updates["currentStreak"] = 1
-                        updates["lastRecordDate"] = todayStr
-                    }
-                }
-
-                userRef.update(updates)
-            }
-        }
-    }
-
-    // 👉 2. HÀM XỬ LÝ TEXT GỬI CHO AI
     fun processAITransaction(userInput: String) {
         viewModelScope.launch {
             isAIProcessing = true
@@ -185,32 +199,26 @@ class TransactionViewModel(
 
             if (jsonString != null) {
                 try {
-                    val cleanJson = jsonString
-                        .replace("```json", "")
-                        .replace("```", "").trim()
+                    val cleanJson = jsonString.replace("```json", "").replace("```", "").trim()
                     val jsonObject = JSONObject(cleanJson)
-
-                    // Kiểm tra trường missing_prompt từ System Instruction
                     val missingPrompt = jsonObject.optString("missing_prompt", "")
 
                     if (missingPrompt.isNotEmpty()) {
                         aiFeedbackMessage = missingPrompt
                     } else {
-                        // Trích xuất các giá trị theo đúng Entity
                         val amount = jsonObject.optDouble("amount", 0.0)
                         val category = jsonObject.optString("category", "Khác")
                         val type = jsonObject.optString("type", "Chi")
                         val paymentMethod = jsonObject.optString("paymentMethod", "Tiền mặt")
                         val note = jsonObject.optString("note", "")
 
-                        // Đưa dữ liệu vào Entity Transaction
                         aiPendingTransaction = Transaction(
                             amount = amount,
                             category = category,
                             type = type,
                             paymentMethod = paymentMethod,
                             note = note,
-                            timestamp = System.currentTimeMillis() // Mặc định là giờ hệ thống
+                            timestamp = System.currentTimeMillis()
                         )
                         aiFeedbackMessage = "Tôi đã phân tích xong. Bạn xem thông tin đã chính xác chưa nhé!"
                     }
@@ -232,7 +240,6 @@ class TransactionViewModel(
         }
     }
 
-    // 👉 3. HÀM DỌN DẸP KHI ĐÓNG BẢNG AI
     fun resetAIState() {
         aiFeedbackMessage = "Xin chào! Bạn vừa chi tiêu gì vậy?"
         aiPendingTransaction = null
@@ -261,36 +268,24 @@ class TransactionViewModel(
 
             repository.addTransaction(trans, imageUri, context)
                 .onSuccess {
-                    updateUserStreak()
+                    calculateAndGetStreak() // Tự động cập nhật lửa
                     loadTransactions()
                     onSuccess()
                 }
-                .onFailure {
-                    android.util.Log.e(
-                        "ADD_TRANSACTION",
-                        "ERROR",
-                        it
-                    )
-                }
+                .onFailure { Log.e("ADD_TRANSACTION", "ERROR", it) }
             _isLoading.value = false
         }
     }
 
-    // Hàm Xóa giao dịch
     fun deleteTransaction(transactionId: String) {
         viewModelScope.launch {
             repository.deleteTransaction(transactionId)
                 .onSuccess {
-                    val currentList = _transactions.value.toMutableList()
-                    currentList.removeAll { it.id == transactionId }
-                    _transactions.value = currentList
-
                     loadTransactions()
                 }
         }
     }
 
-    // Hàm Cập nhật (Sửa) giao dịch (Sửa lại)
     fun updateTransaction(
         transaction: Transaction,
         imageUri: Uri?,
@@ -302,32 +297,20 @@ class TransactionViewModel(
 
             repository.updateTransaction(transaction, imageUri, context)
                 .onSuccess {
-                    updateUserStreak()
+                    calculateAndGetStreak() // Cập nhật lửa
                     loadTransactions()
                     onSuccess()
                 }
-                .onFailure {
-                    android.util.Log.e(
-                        "ADD_TRANSACTION",
-                        "ERROR",
-                        it
-                    )
-                }
+                .onFailure { Log.e("ADD_TRANSACTION", "ERROR", it) }
             _isLoading.value = false
         }
     }
 
-    // Hàm lấy dữ liệu User
     fun loadUserProfile() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val db = FirebaseFirestore.getInstance()
-
-        // Dùng addSnapshotListener để app tự cập nhật nếu thông tin thay đổi
+        val uid = auth.currentUser?.uid ?: return
         db.collection("users").document(uid)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null && snapshot.exists()) {
-                    // Chuyển dữ liệu từ Firebase về model User
-                    // Đảm bảo model User của bạn có hàm constructor không tham số
                     val user = snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
                     _userProfile.value = user
                 }

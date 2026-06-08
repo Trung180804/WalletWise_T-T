@@ -1,3 +1,4 @@
+
 package com.example.walletwise.presentation.home
 
 import android.app.Activity
@@ -63,7 +64,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import androidx.compose.material.icons.filled.LocalFireDepartment
-// 👉 GIẢI QUYẾT LỖI XUNG ĐỘT HÀM ITEMS
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
@@ -211,24 +211,41 @@ fun HomeScreen(
             Box(modifier = Modifier.padding(padding).fillMaxSize()) {
                 when (selectedTab) {
                     0 -> {
-                        val totalIncomeAll = transactions.filter { it.type == "Thu" }.sumOf { it.amount }
-                        val totalExpenseAll = transactions.filter { it.type == "Chi" }.sumOf { it.amount }
+                        val today = LocalDate.now(ZoneId.systemDefault())
+
+                        // 2. Lọc ra các giao dịch CHỈ TRONG HÔM NAY
+                        val transactionsToday = transactions.filter { trans ->
+                            val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+                            txDate == today
+                        }
+
+                        // 3. Tính Thu/Chi của riêng HÔM NAY
+                        val totalIncomeToday = transactionsToday.filter { it.type == "Thu" }.sumOf { it.amount }
+                        val totalExpenseToday = transactionsToday.filter { it.type == "Chi" }.sumOf { it.amount }
+
+                        // 4. Tính SỐ DƯ TỔNG (Vẫn lấy từ danh sách 'transactions' tổng)
+                        val totalBalanceAll = transactions.sumOf { if (it.type == "Thu") it.amount else -it.amount }
+
                         val displayedTransactions = transactions.filter { trans ->
                             val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
-                            val matchDate = if (selectedDateFilter == null) true else {
-                                val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+                            val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+
+                            // Nếu không có bộ lọc ngày nào được chọn (null), mặc định chỉ lấy ngày hôm nay (today)
+                            val matchDate = if (selectedDateFilter == null) {
+                                txDate == today
+                            } else {
                                 txDate == selectedDateFilter
                             }
                             matchMethod && matchDate
                         }.sortedByDescending { it.timestamp }
 
                         Column(modifier = Modifier.fillMaxSize().background(topHeaderBrush)) {
-                            Column(modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)) {
+                            Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
 
                                 // GỌI BANNER TẠI ĐÂY
                                 HomeBannerCarousel(user = user)
 
-                                Spacer(modifier = Modifier.height(24.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -238,12 +255,12 @@ fun HomeScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(text = "Chi tiêu", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalExpenseAll), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalExpenseToday), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(text = "Thu nhập", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalIncomeAll), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalIncomeToday), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(text = "Số dư", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
@@ -254,13 +271,12 @@ fun HomeScreen(
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
-
                             Surface(
                                 modifier = Modifier.fillMaxSize(),
                                 shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
                                 color = bgColor
                             ) {
-                                Column(modifier = Modifier.padding(top = 24.dp, start = 16.dp, end = 16.dp)) {
+                                Column(modifier = Modifier.padding(top = 10.dp, start = 16.dp, end = 16.dp)) {
                                     if (selectedDateFilter != null) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
@@ -296,7 +312,7 @@ fun HomeScreen(
                                                     .background(if (isSelected) Color(0xFF4DD0E1) else cardColor)
                                                     .border(1.dp, if (isSelected) Color.Transparent else Color.LightGray, RoundedCornerShape(20.dp))
                                                     .clickable { selectedFilter = filter }
-                                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(text = filter, color = if (isSelected) Color.Black else Color.Gray, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
@@ -376,7 +392,7 @@ fun HomeScreen(
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(text = "📝 Giao dịch mới:", fontWeight = FontWeight.Bold, color = textColor)
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(text = "• Số tiền: ${formatMoney.format(tx.amount)}", color = textColor)
                                     Text(text = "• Phân loại: ${tx.category} (${tx.type})", color = textColor)
                                     Text(text = "• Nguồn: ${tx.paymentMethod}", color = textColor)
@@ -481,7 +497,8 @@ fun TransactionGridItem(
     val timeString = sdfTime.format(java.util.Date(transaction.timestamp))
     val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale("vi", "VN"))
     val fullDateString = sdfFullDate.format(java.util.Date(transaction.timestamp))
-    var showMenu by remember { mutableStateOf(false) }
+
+    // Đã xóa biến showMenu của nút 3 chấm
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
 
@@ -499,13 +516,7 @@ fun TransactionGridItem(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = transaction.category, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
                 }
-                Box {
-                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, contentDescription = "Tùy chọn", tint = Color.Gray) }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, modifier = Modifier.background(Color.White)) {
-                        DropdownMenuItem(text = { Text(text = "Sửa", color = Color.Black) }, onClick = { showMenu = false; onEdit() })
-                        DropdownMenuItem(text = { Text(text = "Xóa", color = Color.Red) }, onClick = { showMenu = false; showDeleteDialog = true })
-                    }
-                }
+                // Nút 3 chấm đã được gỡ bỏ khỏi đây để giao diện thoáng hơn
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -561,6 +572,38 @@ fun TransactionGridItem(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(text = transaction.note, color = textColor, fontSize = 14.sp)
                             }
+                        }
+                    }
+
+                    // KHU VỰC NÚT SỬA/XÓA MỚI
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                showDetailsDialog = false
+                                showDeleteDialog = true
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                            border = BorderStroke(1.dp, Color.Red),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Xóa", fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = {
+                                showDetailsDialog = false
+                                onEdit()
+                            },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Sửa", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

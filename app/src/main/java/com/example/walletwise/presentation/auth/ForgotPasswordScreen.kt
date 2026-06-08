@@ -4,10 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.walletwise.presentation.auth.components.AuthBackground
@@ -20,53 +22,112 @@ fun ForgotPasswordScreen(
     onNavigateBackToLogin: () -> Unit
 ) {
     var email by remember { mutableStateOf("") }
+    var otpInput by remember { mutableStateOf("") }
+    var step by remember { mutableStateOf(1) } // 1: Nhập email, 2: Nhập OTP
     val state by viewModel.state.collectAsState()
 
     AuthBackground {
-        AuthHeader(title = "Quên Mật Khẩu")
+        // Đổi tiêu đề linh hoạt theo Bước
+        AuthHeader(title = if (step == 1) "Quên Mật Khẩu" else "Xác Minh OTP")
 
-        Text(
-            text = "Nhập email của bạn để nhận liên kết đặt lại mật khẩu hệ thống.",
-            color = Color.LightGray,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        if (step == 1) {
+            // ==========================================
+            // BƯỚC 1: NHẬP EMAIL ĐỂ NHẬN MÃ
+            // ==========================================
+            Text(
+                text = "Nhập email của bạn để nhận mã OTP xác thực.",
+                color = Color.LightGray,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
-        AuthTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = "Email khôi phục",
-            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color.Gray) }
-        )
+            AuthTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = "Email khôi phục",
+                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color.Gray) }
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (state.isLoading) {
-            CircularProgressIndicator(color = Color(0xFFFFD700))
+            if (state.isLoading) {
+                CircularProgressIndicator(color = Color(0xFFFFD700), modifier = Modifier.padding(top = 16.dp))
+            } else {
+                Button(
+                    onClick = {
+                        if (email.isNotBlank()) {
+                            viewModel.sendOtpEmail(email)
+                            step = 2 // Chuyển sang giao diện nhập OTP
+                        } else {
+                            // TODO: Có thể hiện toast thông báo chưa nhập email
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700))
+                ) {
+                    Text("GỬI MÃ OTP", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         } else {
-            Button(
-                onClick = { viewModel.resetPassword(email) },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700))
-            ) {
-                Text("GỬI YÊU CẦU", color = Color.Black, fontSize = 16.sp)
+            // ==========================================
+            // BƯỚC 2: NHẬP MÃ OTP
+            // ==========================================
+            Text(
+                text = "Mã xác nhận đã được gửi tới:\n$email",
+                color = Color.White,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            AuthTextField(
+                value = otpInput,
+                onValueChange = { otpInput = it },
+                label = "Nhập mã 6 số",
+                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray) }
+            )
+
+            if (state.isLoading) {
+                CircularProgressIndicator(color = Color(0xFF00C875), modifier = Modifier.padding(top = 16.dp))
+            } else {
+                Button(
+                    onClick = {
+                        viewModel.verifyOtp(email, otpInput) {
+                            // Khi OTP đúng, sẽ gọi hàm này.
+                            // Hiện tại đang quay về Login, sau này bạn có thể dẫn sang trang "Tạo Mật Khẩu Mới"
+                            onNavigateBackToLogin()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C875)) // Màu xanh lá cho bước xác nhận
+                ) {
+                    Text("XÁC NHẬN", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
-        state.error?.let {
+        // ==========================================
+        // KHU VỰC THÔNG BÁO LỖI / THÀNH CÔNG
+        // ==========================================
+        state.error?.let { msg ->
             Spacer(modifier = Modifier.height(16.dp))
-            // Chữ thông báo (Màu xanh nếu gửi thành công, đỏ nếu lỗi)
             Text(
-                text = it,
-                color = if (it.contains("Đã gửi")) Color.Green else Color.Red
+                text = msg,
+                color = if (msg.contains("thành công") || msg.contains("Đã gửi")) Color.Green else Color.Red,
+                fontWeight = FontWeight.Medium
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Nút Quay lại
         Text(
             text = "Quay lại Đăng nhập",
             color = Color(0xFFFFD700),
-            modifier = Modifier.clickable { onNavigateBackToLogin() }
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable {
+                // Reset lại lỗi khi quay ra
+                viewModel.clearError()
+                onNavigateBackToLogin()
+            }
         )
     }
 }
