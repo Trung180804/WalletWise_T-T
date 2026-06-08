@@ -100,4 +100,50 @@ class TransactionRepositoryImpl : TransactionRepository {
             Result.failure(e)
         }
     }
+
+    override suspend fun deleteTransaction(transactionId: String): Result<Boolean> {
+        return try {
+            db.collection("TRANSACTIONS").document(transactionId).delete().await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateTransaction(
+        transaction: Transaction,
+        localImageUri: Uri?,
+        context: Context
+    ): Result<Boolean> {
+        return try {
+
+            var imageUrl = transaction.imageUrl
+
+            if (localImageUri != null) {
+                imageUrl = uploadImageToImgBB(localImageUri, context)
+            }
+
+            val updatedTransaction = transaction.copy(
+                imageUrl = imageUrl
+            )
+
+            db.collection("TRANSACTIONS")
+                .document(transaction.id)
+                .set(updatedTransaction)
+                .await()
+
+            if (localImageUri != null) {
+                imageUrl = uploadImageToImgBB(localImageUri, context)
+
+                android.util.Log.d(
+                    "UPDATE_TX",
+                    "UPLOADED_URLl = $imageUrl"
+                )
+            }
+            Result.success(true)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

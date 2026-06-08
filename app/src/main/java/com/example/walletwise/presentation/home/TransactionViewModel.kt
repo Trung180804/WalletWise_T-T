@@ -1,7 +1,11 @@
 package com.example.walletwise.presentation.home
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.walletwise.data.repository.TransactionRepositoryImpl
@@ -13,31 +17,48 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 
 class TransactionViewModel(
     private val repository: TransactionRepository = TransactionRepositoryImpl()
 ) : ViewModel() {
 
+    private val auth = FirebaseAuth.getInstance()
+    private val db = FirebaseFirestore.getInstance()
+
     // Danh sách giao dịch
     private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
     val transactions: StateFlow<List<Transaction>> = _transactions.asStateFlow()
 
-    // 👉 STATE FLOW ĐỂ LƯU SỐ STREAK HIỂN THỊ LÊN UI
+    private val _userProfile = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
+    val userProfile: StateFlow<com.example.walletwise.domain.model.User?> = _userProfile.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
+
+    // Lưu số Streak hiển thị lên UI
     private val _streakCount = MutableStateFlow(0)
     val streakCount: StateFlow<Int> = _streakCount.asStateFlow()
 
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
+    // Biến lưu trữ giao dịch đang được chọn để Sửa
+    var transactionToEdit by mutableStateOf<Transaction?>(null)
+
+    // CÁC BIẾN TRẠNG THÁI CHO TRỢ LÝ AI
+    val aiAssistant = TransactionAIAssistant()
+    var isAIProcessing by mutableStateOf(false)
+    var aiFeedbackMessage by mutableStateOf("Xin chào! Bạn vừa chi tiêu gì vậy?")
+    var aiPendingTransaction by mutableStateOf<Transaction?>(null)
 
     init {
         loadTransactions()
+        loadUserProfile()
         checkAndGenerateFakeData()
-
-        // Gọi hàm tính toán Streak ngay khi khởi tạo
         calculateAndGetStreak()
     }
 
@@ -57,7 +78,6 @@ class TransactionViewModel(
                 var currentStreak = document.getLong("streakCount")?.toInt() ?: 0
 
                 if (lastActiveStr == null) {
-                    // Lần đầu sử dụng app
                     currentStreak = 1
                     updateStreakToFirebase(userRef, todayStr, currentStreak)
                 } else {
@@ -67,28 +87,23 @@ class TransactionViewModel(
 
                         when {
                             daysBetween == 0L -> {
-                                // Đã mở app hôm nay rồi, giữ nguyên streak
                                 _streakCount.value = currentStreak
                             }
                             daysBetween == 1L -> {
-                                // Mở app liên tiếp, tăng streak
                                 currentStreak += 1
                                 updateStreakToFirebase(userRef, todayStr, currentStreak)
                             }
                             daysBetween > 1L -> {
-                                // Bỏ lỡ 1 ngày trở lên -> Chuỗi đứt, quay về 1
                                 currentStreak = 1
                                 updateStreakToFirebase(userRef, todayStr, currentStreak)
                             }
                         }
                     } catch (e: Exception) {
                         Log.e("StreakLogic", "Lỗi format ngày tháng: ${e.message}")
-                        // Bị lỗi format -> Khởi tạo lại chuỗi = 1
                         updateStreakToFirebase(userRef, todayStr, 1)
                     }
                 }
             } else {
-                // Document USERS chưa tồn tại -> Tạo mới với streak = 1
                 updateStreakToFirebase(userRef, todayStr, 1)
             }
         }.addOnFailureListener { e ->
@@ -103,16 +118,13 @@ class TransactionViewModel(
         )
         userRef.set(updates, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
-                // Cập nhật StateFlow để UI tự động đổi
                 _streakCount.value = streak
             }
     }
 
-    // --- HÀM BƠM DATA GIẢ (Dùng để test giao diện Lịch) ---
+    // --- HÀM BƠM DATA GIẢ ---
     private fun checkAndGenerateFakeData() {
         val currentUser = auth.currentUser
-
-        // Thay đúng email bạn dùng để test
         val targetEmail = "sniper021003@gmail.com"
         if (currentUser == null || currentUser.email != targetEmail) return
 
@@ -136,25 +148,31 @@ class TransactionViewModel(
             "https://picsum.photos/id/365/300/300"
         )
 
-        val currentMonth = java.time.YearMonth.now()
+        val now = java.time.LocalDateTime.now()
+        val currentMonth = YearMonth.now()
 
         for (i in 1..30) {
             val randomDay = (1..currentMonth.lengthOfMonth()).random()
             val date = currentMonth.atDay(randomDay)
-            val timestamp = date.atTime((8..20).random(), (0..59).random())
+
+            val maxHour = if (date.dayOfMonth == now.dayOfMonth) now.hour else 23
+            val randomHour = (0..maxHour).random()
+            val maxMinute = if (date.dayOfMonth == now.dayOfMonth && randomHour == now.hour) now.minute else 59
+            val randomMinute = (0..maxMinute).random()
+
+            val timestamp = date.atTime(randomHour, randomMinute)
                 .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-            val txId = java.util.UUID.randomUUID().toString()
-
+            val txId = UUID.randomUUID().toString()
             val fakeTx = hashMapOf(
                 "id" to txId,
                 "userId" to uid,
                 "amount" to (10..500).random() * 1000.0,
                 "category" to listOf("Ăn uống", "Mua sắm", "Tiền nhà", "Siêu thị").random(),
-                "type" to listOf("Chi", "Thu").random(),
-                "paymentMethod" to listOf("Tiền mặt", "Chuyển khoản", "Thẻ tín dụng").random(),
+                "type" to "Chi",
+                "paymentMethod" to "Tiền mặt",
                 "timestamp" to timestamp,
-                "imageUrl" to if ((1..10).random() > 3) sampleImages.random() else ""
+                "imageUrl" to sampleImages.random()
             )
 
             db.collection("TRANSACTIONS").document(txId).set(fakeTx)
@@ -162,15 +180,69 @@ class TransactionViewModel(
         loadTransactions()
     }
 
-    // Hàm gọi dữ liệu từ Firebase/Offline Cache
     fun loadTransactions() {
         viewModelScope.launch {
             repository.getTransactions()
                 .onSuccess { list ->
-                    // Sắp xếp giao dịch mới nhất lên đầu
                     _transactions.value = list.sortedByDescending { it.timestamp }
                 }
         }
+    }
+
+    fun processAITransaction(userInput: String) {
+        viewModelScope.launch {
+            isAIProcessing = true
+            aiFeedbackMessage = "Đang suy nghĩ..."
+            aiPendingTransaction = null
+
+            val jsonString = aiAssistant.analyzeTransactionText(userInput)
+
+            if (jsonString != null) {
+                try {
+                    val cleanJson = jsonString.replace("```json", "").replace("```", "").trim()
+                    val jsonObject = JSONObject(cleanJson)
+                    val missingPrompt = jsonObject.optString("missing_prompt", "")
+
+                    if (missingPrompt.isNotEmpty()) {
+                        aiFeedbackMessage = missingPrompt
+                    } else {
+                        val amount = jsonObject.optDouble("amount", 0.0)
+                        val category = jsonObject.optString("category", "Khác")
+                        val type = jsonObject.optString("type", "Chi")
+                        val paymentMethod = jsonObject.optString("paymentMethod", "Tiền mặt")
+                        val note = jsonObject.optString("note", "")
+
+                        aiPendingTransaction = Transaction(
+                            amount = amount,
+                            category = category,
+                            type = type,
+                            paymentMethod = paymentMethod,
+                            note = note,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        aiFeedbackMessage = "Tôi đã phân tích xong. Bạn xem thông tin đã chính xác chưa nhé!"
+                    }
+                } catch (e: Exception) {
+                    val errorMessage = e.message ?: ""
+                    if (errorMessage.contains("high demand") || errorMessage.contains("503")) {
+                        aiFeedbackMessage = "AI đang có quá nhiều người sử dụng. Bạn vui lòng thử lại sau vài phút nhé!"
+                    } else if (errorMessage.contains("Quota") || errorMessage.contains("limit")) {
+                        aiFeedbackMessage = "Đã hết lượt sử dụng AI miễn phí hôm nay."
+                    } else {
+                        aiFeedbackMessage = "Xin lỗi, tôi chưa hiểu rõ. Bạn nói lại cụ thể khoản tiền và mục đích nhé!"
+                    }
+                    e.printStackTrace()
+                }
+            } else {
+                aiFeedbackMessage = "Lỗi kết nối AI. Vui lòng thử lại!"
+            }
+            isAIProcessing = false
+        }
+    }
+
+    fun resetAIState() {
+        aiFeedbackMessage = "Xin chào! Bạn vừa chi tiêu gì vậy?"
+        aiPendingTransaction = null
     }
 
     fun addTransaction(
@@ -180,10 +252,12 @@ class TransactionViewModel(
         note: String,
         paymentMethod: String,
         imageUri: Uri?,
-        context: android.content.Context,
+        context: Context,
         onSuccess: () -> Unit
     ) {
         viewModelScope.launch {
+            _isLoading.value = true
+
             val trans = Transaction(
                 amount = amount,
                 type = type,
@@ -194,13 +268,52 @@ class TransactionViewModel(
 
             repository.addTransaction(trans, imageUri, context)
                 .onSuccess {
+                    calculateAndGetStreak() // Tự động cập nhật lửa
                     loadTransactions()
-
-                    // Cập nhật lại streak nếu cần (khi user thêm giao dịch cũng là một hành động mở app)
-                    calculateAndGetStreak()
-
                     onSuccess()
                 }
+                .onFailure { Log.e("ADD_TRANSACTION", "ERROR", it) }
+            _isLoading.value = false
         }
+    }
+
+    fun deleteTransaction(transactionId: String) {
+        viewModelScope.launch {
+            repository.deleteTransaction(transactionId)
+                .onSuccess {
+                    loadTransactions()
+                }
+        }
+    }
+
+    fun updateTransaction(
+        transaction: Transaction,
+        imageUri: Uri?,
+        context: Context,
+        onSuccess: () -> Unit
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+
+            repository.updateTransaction(transaction, imageUri, context)
+                .onSuccess {
+                    calculateAndGetStreak() // Cập nhật lửa
+                    loadTransactions()
+                    onSuccess()
+                }
+                .onFailure { Log.e("ADD_TRANSACTION", "ERROR", it) }
+            _isLoading.value = false
+        }
+    }
+
+    fun loadUserProfile() {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null && snapshot.exists()) {
+                    val user = snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
+                    _userProfile.value = user
+                }
+            }
     }
 }

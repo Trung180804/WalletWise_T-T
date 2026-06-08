@@ -5,14 +5,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.example.walletwise.presentation.auth.components.AuthBackground
 import com.example.walletwise.presentation.auth.components.AuthHeader
 import com.example.walletwise.presentation.auth.components.AuthTextField
@@ -26,6 +30,10 @@ fun LoginScreen(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    // 👉 Biến trạng thái để theo dõi việc ẩn/hiện mật khẩu
+    var passwordVisible by remember { mutableStateOf(false) }
+
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(state.isSuccess) {
@@ -47,7 +55,18 @@ fun LoginScreen(
             onValueChange = { password = it },
             label = "Mật khẩu",
             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray) },
-            visualTransformation = PasswordVisualTransformation()
+
+            trailingIcon = {
+                val image = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff
+                val description = if (passwordVisible) "Ẩn mật khẩu" else "Hiện mật khẩu"
+
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(imageVector = image, contentDescription = description, tint = Color.Gray)
+                }
+            },
+
+            // 👉 Xử lý đổi Dấu chấm <-> Chữ thường
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation()
         )
 
         // Quên mật khẩu link
@@ -69,7 +88,7 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700))
             ) {
-                Text("ĐĂNG NHẬP", color = Color.Black, fontSize = 16.sp)
+                Text("ĐĂNG NHẬP", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
 

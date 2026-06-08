@@ -11,6 +11,8 @@ import com.example.walletwise.presentation.home.AddTransactionScreen
 import com.example.walletwise.presentation.home.HomeScreen
 import com.example.walletwise.presentation.home.TransactionViewModel
 import com.google.firebase.auth.FirebaseAuth
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 @Composable
 fun AppNavigation(
@@ -22,6 +24,8 @@ fun AppNavigation(
 
     val authRepository = remember { AuthRepositoryImpl() }
     val startRoute = if (authRepository.isUserLoggedIn()) "home" else "login"
+
+    val userState by authViewModel.currentUser.collectAsState()
 
     NavHost(navController = navController, startDestination = startRoute) {
 
@@ -64,7 +68,7 @@ fun AppNavigation(
         composable("home") {
             HomeScreen(
                 viewModel = transactionViewModel,
-                user = currentUser, // 👉 Đây là user cũ từ MainActivity
+                user = userState,
                 onNavigateToAdd = { navController.navigate("add_transaction") },
                 onLogout = {
 

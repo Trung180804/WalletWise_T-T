@@ -20,6 +20,9 @@ class AuthViewModel(
 
     private val _currentUser = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
     val currentUser: StateFlow<com.example.walletwise.domain.model.User?> = _currentUser.asStateFlow()
+    init {
+        loadUserProfile()
+    }
 
     fun register(email: String, pass: String, username: String) {
         if (email.isBlank() || pass.isBlank() || username.isBlank()) {

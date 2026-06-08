@@ -3,11 +3,15 @@ package com.example.walletwise.presentation.home
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -55,18 +60,28 @@ fun AddTransactionScreen(
     viewModel: TransactionViewModel,
     onNavigateBack: () -> Unit
 ) {
-    var type by remember { mutableStateOf("Chi") }
-    var amount by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(expenseCategories[0].name) }
-    var selectedWallet by remember { mutableStateOf("Tiền mặt") }
+    val txToEdit = viewModel.transactionToEdit
+    val isEditMode = txToEdit != null
+
+    var type by remember { mutableStateOf(txToEdit?.type ?: "Chi") }
+
+    val initialAmount = if (isEditMode) txToEdit!!.amount.toLong().toString() else ""
+    var amount by remember { mutableStateOf(initialAmount) }
+
+    var note by remember { mutableStateOf(txToEdit?.note ?: "") }
+    var category by remember { mutableStateOf(txToEdit?.category ?: expenseCategories[0].name) }
+    var selectedWallet by remember { mutableStateOf(txToEdit?.paymentMethod ?: "Tiền mặt") }
 
     val mainColor = if (type == "Chi") Color(0xFFFA3B70) else Color(0xFF00C875)
     val bgColor = Color(0xFFF8F9FA)
     val currentCategories = if (type == "Chi") expenseCategories else incomeCategories
 
+    val isLoading by viewModel.isLoading.collectAsState()
+
     LaunchedEffect(type) {
-        category = currentCategories[0].name
+        if (currentCategories.none { it.name == category }) {
+            category = currentCategories[0].name
+        }
     }
 
     val context = LocalContext.current
@@ -77,50 +92,47 @@ fun AddTransactionScreen(
         if (success) { capturedImageUri = tempImageUri }
     }
 
+    val handleBack = {
+        viewModel.transactionToEdit = null
+        onNavigateBack()
+    }
+
     fun launchCamera() {
         try {
-            // 1. Tạo file tạm trong thư mục Cache
             val file = File(context.cacheDir, "receipt_${System.currentTimeMillis()}.jpg")
             if (file.exists()) file.delete()
             file.createNewFile()
 
-            // 2. Lấy URI an toàn qua FileProvider
             val authority = "com.example.walletwise.fileprovider"
             val uri = FileProvider.getUriForFile(context, authority, file)
 
-            // 3. Gọi Camera
             tempImageUri = uri
             cameraLauncher.launch(uri)
-
-        } catch (e: IllegalArgumentException) {
-            // Lỗi 1: Do gõ sai tên authority hoặc cấu hình file_paths.xml bị trật
-            android.widget.Toast.makeText(
-                context,
-                "LỖI MANIFEST: Chưa cấu hình đúng FileProvider!",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-            e.printStackTrace()
-        } catch (e: android.content.ActivityNotFoundException) {
-            // Lỗi 2: Điện thoại/Máy ảo không có ứng dụng Camera
-            android.widget.Toast.makeText(
-                context,
-                "LỖI THIẾT BỊ: Không tìm thấy ứng dụng Camera!",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-            e.printStackTrace()
         } catch (e: Exception) {
-            // Các lỗi bí ẩn khác
-            android.widget.Toast.makeText(
-                context,
-                "LỖI CAMERA: ${e.localizedMessage}",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
+            android.widget.Toast.makeText(context, "LỖI CAMERA: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
     }
 
     Scaffold(
-        containerColor = Color.White
+        containerColor = Color.White,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (isEditMode) "Sửa giao dịch" else "Thêm giao dịch",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { handleBack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -130,35 +142,31 @@ fun AddTransactionScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Tab Chọn Chi Tiêu / Thu Nhập
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(bgColor, RoundedCornerShape(24.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                TabButton(text = "Chi tiêu", isSelected = type == "Chi", activeColor = Color(0xFFFA3B70), modifier = Modifier.weight(1f)) { type = "Chi" }
-                TabButton(text = "Thu nhập", isSelected = type == "Thu", activeColor = Color(0xFF00C875), modifier = Modifier.weight(1f)) { type = "Thu" }
-            }
+            AnimatedSegmentedSlider(
+                currentType = type,
+                onTypeChange = { type = it }
+            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Khu vực Camera
             Box(
                 modifier = Modifier
-                    .size(180.dp)
+                    .size(160.dp)
                     .background(bgColor, RoundedCornerShape(24.dp))
                     .clickable { launchCamera() },
                 contentAlignment = Alignment.Center
             ) {
-                if (capturedImageUri != null) {
+                val imageToShow = capturedImageUri ?: txToEdit?.imageUrl
+                if (imageToShow != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(capturedImageUri),
+                        painter = rememberAsyncImagePainter(imageToShow),
                         contentDescription = "Hóa đơn",
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(24.dp)),
                         contentScale = ContentScale.Crop
                     )
                 } else {
@@ -173,7 +181,6 @@ fun AddTransactionScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
 
             // Số tiền & Wallet
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -273,19 +280,38 @@ fun AddTransactionScreen(
 
             // Nút Lưu
             Button(
+                enabled = !isLoading,
                 onClick = {
                     val amountValue = amount.toDoubleOrNull() ?: 0.0
 
-                    // TRUYỀN THÊM selectedWallet VÀO HÀM NÀY
-                    viewModel.addTransaction(amountValue, type, category, note, selectedWallet, capturedImageUri, context) {
-                        onNavigateBack()
+                    if (isEditMode) {
+                        viewModel.updateTransaction(
+                            transaction = txToEdit!!.copy(
+                                amount = amountValue,
+                                type = type,
+                                category = category,
+                                note = note,
+                                paymentMethod = selectedWallet
+                            ),
+                            imageUri = capturedImageUri,
+                            context = context
+                        ) {
+                            handleBack()
+                        }
+                    } else {
+                        viewModel.addTransaction(amountValue, type, category, note, selectedWallet, capturedImageUri, context) {
+                            amount = ""
+                            note = ""
+                            handleBack()
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(55.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = mainColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(if (type == "Chi") "Lưu chi tiêu" else "Lưu thu nhập", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                val btnText = if (isEditMode) "Cập nhật giao dịch" else if (type == "Chi") "Lưu chi tiêu" else "Lưu thu nhập"
+                Text(btnText, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -293,36 +319,80 @@ fun AddTransactionScreen(
     }
 }
 
+// 👉 COMPONENT MỚI: Thanh trượt iOS Style
 @Composable
-fun TabButton(text: String, isSelected: Boolean, activeColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun AnimatedSegmentedSlider(
+    currentType: String,
+    onTypeChange: (String) -> Unit
+) {
+    val isIncome = currentType == "Thu"
+    val activeColor = if (isIncome) Color(0xFF00C875) else Color(0xFFFA3B70)
+    val interactionSource = remember { MutableInteractionSource() }
+
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            // Chuyển màu nền sang xám A9A9A9 khi chưa chọn
-            .background(if (isSelected) activeColor else Color(0xFFA9A9A9))
-            .clickable { onClick() }
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(Color(0xFFF0F4F8)) // Màu xám nền nhạt
+            .clickable(interactionSource = interactionSource, indication = null) {
+                onTypeChange(if (isIncome) "Chi" else "Thu")
+            }
     ) {
-        // Đổi chữ thành màu Trắng cho nổi bật trên nền xám
-        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val segmentWidth = maxWidth / 2
+
+            // Animation chạy mượt mà
+            val offset by animateDpAsState(
+                targetValue = if (isIncome) segmentWidth else 0.dp,
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                label = "sliderAnim"
+            )
+
+            // Khối màu trượt
+            Box(
+                modifier = Modifier
+                    .offset(x = offset)
+                    .width(segmentWidth)
+                    .fillMaxHeight()
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(activeColor)
+            )
+
+            // Text hiển thị
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = interactionSource, indication = null) { onTypeChange("Chi") }, contentAlignment = Alignment.Center) {
+                    Text("Chi tiêu", color = if (!isIncome) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = interactionSource, indication = null) { onTypeChange("Thu") }, contentAlignment = Alignment.Center) {
+                    Text("Thu nhập", color = if (isIncome) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+        }
     }
 }
 
 @Composable
 fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, onClick: () -> Unit) {
+    // 👉 Tinh chỉnh lại bộ màu sắc cho mềm mại
+    val unselectedBgColor = Color(0xFFF0F4F8) // Xám pastel sáng, sạch sẽ
+    val selectedBgColor = activeColor.copy(alpha = 0.15f) // Pha màu chủ đạo nhạt đi 15%
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .padding(bottom = 16.dp)
             .width(75.dp)
-            .clickable { onClick() }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() }
     ) {
         Box(
             modifier = Modifier
                 .size(60.dp)
-                // Nền sáng nhẹ nếu được chọn, nền xám A9A9A9 nếu chưa chọn
-                .background(if (isSelected) Color(0xFFF8F9FA) else Color(0xFFc0c0c0), RoundedCornerShape(16.dp))
+                .background(if (isSelected) selectedBgColor else unselectedBgColor, RoundedCornerShape(16.dp))
                 .border(
                     width = if (isSelected) 2.dp else 0.dp,
                     color = if (isSelected) activeColor else Color.Transparent,
@@ -332,7 +402,13 @@ fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, on
         ) {
             Text(item.icon, fontSize = 28.sp)
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(item.name, fontSize = 11.sp, color = if (isSelected) activeColor else Color.DarkGray, textAlign = TextAlign.Center, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = item.name,
+            fontSize = 11.sp,
+            color = if (isSelected) activeColor else Color.DarkGray,
+            textAlign = TextAlign.Center,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+        )
     }
 }
