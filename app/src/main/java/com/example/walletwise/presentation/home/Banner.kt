@@ -119,22 +119,22 @@ fun GreetingPage(user: User?) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.Top
             ) {
                 Text(
                     text = "👋 Xin chào",
                     color = Color.White.copy(alpha = 0.9f),
                     fontSize = 14.sp
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = userName,
                     color = Color.White,
-                    fontSize = 28.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Chúc bạn một ngày quản lý tài chính hiệu quả 💰",
                     color = Color.White.copy(alpha = 0.85f),
@@ -191,21 +191,21 @@ fun StreakDashboardBanner(user: User?) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (isUpdatedToday) "Hành trình hôm nay hoàn thành!" else "Duy trì kỷ luật tài chính",
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (isUpdatedToday) randomTip else "Hôm nay bạn chưa thêm giao dịch. Ghi chép ngay kẻo đứt chuỗi nhé! ⏳",
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         color = Color.White.copy(alpha = 0.85f),
                         maxLines = 2,
                         lineHeight = 20.sp

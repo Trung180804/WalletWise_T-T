@@ -139,14 +139,15 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
     val endTime = timeData.second
 
     val timeFilteredTx = transactions.filter { it.timestamp in startTime..endTime }
-    val totalIncome = timeFilteredTx.filter { it.type == "Thu" }.sumOf { it.amount }
-    val totalExpense = timeFilteredTx.filter { it.type == "Chi" }.sumOf { it.amount }
-    val balance = totalIncome - totalExpense
+
+    val totalIncome = timeFilteredTx.filter { it.type.trim().equals("Thu", ignoreCase = true) }.sumOf { it.amount }
+    val totalExpense = timeFilteredTx.filter { it.type.trim().equals("Chi", ignoreCase = true) }.sumOf { it.amount }
+    val netCashFlow = totalIncome - totalExpense // Đổi tên biến từ balance thành netCashFlow để rõ nghĩa
 
     val currentTransactions = timeFilteredTx.filter {
         when (selectedTxType) {
-            1 -> it.type == "Thu"
-            2 -> it.type == "Chi"
+            1 -> it.type.trim().equals("Thu", ignoreCase = true)
+            2 -> it.type.trim().equals("Chi", ignoreCase = true)
             else -> true
         }
     }
@@ -156,13 +157,12 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
         .map { (key, list) -> Triple(key.first, key.second, list.sumOf { it.amount }) }
         .sortedByDescending { it.third }
 
-    // 👉 ĐÂY LÀ KHỐI LỆNH TẠO DỮ LIỆU ĐỘNG CHO BIỂU ĐỒ TÙY THEO BỘ LỌC
     val dynamicChartData = remember(selectedTimeTab, startTime, endTime, transactions) {
         val data = mutableListOf<StatChartPoint>()
         val cal = Calendar.getInstance().apply { timeInMillis = startTime }
 
         when (selectedTimeTab) {
-            0 -> { // 1 Tuần -> Chia làm 7 cột (T2 -> CN)
+            0 -> {
                 val sdf = SimpleDateFormat("EE", Locale("vi", "VN"))
                 for (i in 0..6) {
                     val dayStart = cal.timeInMillis
@@ -170,39 +170,39 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                     val dayEnd = cal.timeInMillis - 1
 
                     val txs = transactions.filter { it.timestamp in dayStart..dayEnd }
-                    val inc = txs.filter { it.type == "Thu" }.sumOf { it.amount }.toFloat()
-                    val exp = txs.filter { it.type == "Chi" }.sumOf { it.amount }.toFloat()
+                    val inc = txs.filter { it.type.trim().equals("Thu", ignoreCase = true) }.sumOf { it.amount }.toFloat()
+                    val exp = txs.filter { it.type.trim().equals("Chi", ignoreCase = true) }.sumOf { it.amount }.toFloat()
 
                     var label = sdf.format(java.util.Date(dayStart)).replace("Thứ ", "T")
                     if (label.lowercase() == "chủ nhật") label = "CN"
                     data.add(StatChartPoint(label, inc, exp))
                 }
             }
-            1 -> { // 1 Tháng -> Chia làm các Tuần (Tuần 1, Tuần 2...)
+            1 -> {
                 var weekNum = 1
                 while (cal.timeInMillis <= endTime) {
                     val segmentStart = cal.timeInMillis
                     cal.add(Calendar.DAY_OF_YEAR, 7)
                     var segmentEnd = cal.timeInMillis - 1
-                    if (segmentEnd > endTime) segmentEnd = endTime // Tránh lấn sang tháng sau
+                    if (segmentEnd > endTime) segmentEnd = endTime
 
                     val txs = transactions.filter { it.timestamp in segmentStart..segmentEnd }
-                    val inc = txs.filter { it.type == "Thu" }.sumOf { it.amount }.toFloat()
-                    val exp = txs.filter { it.type == "Chi" }.sumOf { it.amount }.toFloat()
+                    val inc = txs.filter { it.type.trim().equals("Thu", ignoreCase = true) }.sumOf { it.amount }.toFloat()
+                    val exp = txs.filter { it.type.trim().equals("Chi", ignoreCase = true) }.sumOf { it.amount }.toFloat()
 
                     data.add(StatChartPoint("Tuần $weekNum", inc, exp))
                     weekNum++
                 }
             }
-            2 -> { // 1 Năm -> Chia làm 12 Tháng (T1 -> T12)
+            2 -> {
                 for (i in 1..12) {
                     val monthStart = cal.timeInMillis
                     cal.add(Calendar.MONTH, 1)
                     val monthEnd = cal.timeInMillis - 1
 
                     val txs = transactions.filter { it.timestamp in monthStart..monthEnd }
-                    val inc = txs.filter { it.type == "Thu" }.sumOf { it.amount }.toFloat()
-                    val exp = txs.filter { it.type == "Chi" }.sumOf { it.amount }.toFloat()
+                    val inc = txs.filter { it.type.trim().equals("Thu", ignoreCase = true) }.sumOf { it.amount }.toFloat()
+                    val exp = txs.filter { it.type.trim().equals("Chi", ignoreCase = true) }.sumOf { it.amount }.toFloat()
 
                     data.add(StatChartPoint("T$i", inc, exp))
                 }
@@ -211,7 +211,6 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
         data
     }
 
-    // Tiêu đề động cho biểu đồ
     val chartTitle = when (selectedTimeTab) {
         0 -> "Thống kê các ngày trong tuần"
         1 -> "Thống kê các tuần trong tháng"
@@ -258,7 +257,6 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
         }
 
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            // Bộ lọc Tuần/Tháng/Năm
             Row(modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).background(Color.White), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf("Tuần", "Tháng", "Năm").forEachIndexed { index, title ->
                     Box(
@@ -298,7 +296,6 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
             if (mainTab == 0) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    // Thẻ Card Tổng quan
                     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor), elevation = CardDefaults.cardElevation(2.dp)) {
                         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -312,8 +309,9 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                             }
                             Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray)
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Số dư", color = textColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text(formatMoney.format(balance), color = if (balance >= 0) primaryBlue else ColorExpense, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                // SỬA TẠI ĐÂY: Thay "Số dư" thành "Chênh lệch" để sửa lỗi logic gây hiểu nhầm
+                                Text("Chênh lệch", color = textColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text(formatMoney.format(netCashFlow), color = if (netCashFlow >= 0) primaryBlue else ColorExpense, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                         }
                     }
@@ -335,7 +333,8 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
-                        DonutChart(categoryTotals, selectedTxType, totalIncome, totalExpense, balance, formatMoney)
+                        // Truyền netCashFlow xuống thay vì balance
+                        DonutChart(categoryTotals, selectedTxType, totalIncome, totalExpense, netCashFlow, formatMoney)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -381,7 +380,7 @@ fun ChartLegend(typeFilter: Int) {
 
 @Composable
 fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Double, totalExpense: Double, formatMoney: NumberFormat, index: Int, textColor: Color) {
-    val isIncome = item.second == "Thu"
+    val isIncome = item.second.trim().equals("Thu", ignoreCase = true)
     val sign = if (isIncome) "+" else "-"
     val amountColor = if (isIncome) ColorIncome else ColorExpense
     val typeTotal = if (isIncome) totalIncome else totalExpense
@@ -416,7 +415,9 @@ fun DonutChart(categoryTotals: List<Triple<String, String, Double>>, typeFilter:
 
     val chartTotal = chartData.sumOf { it.third }
     val centerText = if (typeFilter == 0) balance else chartTotal
-    val centerLabel = if (typeFilter == 0) "Số dư" else "Tổng cộng"
+
+    // SỬA TẠI ĐÂY: Đổi nhãn tâm vòng tròn từ "Số dư" thành "Chênh lệch"
+    val centerLabel = if (typeFilter == 0) "Chênh lệch" else "Tổng cộng"
 
     if (chartTotal == 0.0) {
         Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { Text("Chưa có dữ liệu", color = Color.Gray) }
@@ -429,14 +430,21 @@ fun DonutChart(categoryTotals: List<Triple<String, String, Double>>, typeFilter:
                 var startAngle = -90f
                 chartData.forEachIndexed { index, item ->
                     val sweepAngle = ((item.third / chartTotal) * 360f).toFloat()
-                    val arcColor = if (typeFilter == 0 && item.second == "Thu") ColorIncome else if (typeFilter == 0 && item.second == "Chi") ColorExpense else colors[index % colors.size]
+                    val arcColor = if (typeFilter == 0 && item.second.trim().equals("Thu", ignoreCase = true)) {
+                        ColorIncome
+                    } else if (typeFilter == 0 && item.second.trim().equals("Chi", ignoreCase = true)) {
+                        ColorExpense
+                    } else {
+                        colors[index % colors.size]
+                    }
                     drawArc(color = arcColor, startAngle = startAngle, sweepAngle = sweepAngle, useCenter = false, style = Stroke(width = 45f, cap = StrokeCap.Butt))
                     startAngle += sweepAngle
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(centerLabel, color = Color.Gray, fontSize = 12.sp)
-                Text(text = formatMoney.format(centerText), color = if (typeFilter == 0 && centerText < 0) ColorExpense else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                // Đổi màu text thành Đỏ (ColorExpense) nếu chênh lệch âm (Chi > Thu)
+                Text(text = formatMoney.format(centerText), color = if (typeFilter == 0 && centerText < 0) ColorExpense else Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -465,7 +473,7 @@ fun LegendItem(color: Color, label: String, amount: Double, formatMoney: NumberF
         Spacer(modifier = Modifier.width(6.dp))
         Column {
             Text(label, color = Color.LightGray, fontSize = 11.sp)
-            Text(formatMoney.format(amount), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(formatMoney.format(amount), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

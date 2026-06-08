@@ -116,8 +116,10 @@ fun AddTransactionScreen(
 
     Scaffold(
         containerColor = Color.White,
+        contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White),
                 title = {
                     Text(
                         text = if (isEditMode) "Sửa giao dịch" else "Thêm giao dịch",
@@ -130,7 +132,6 @@ fun AddTransactionScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
             )
         }
     ) { padding ->
@@ -189,7 +190,11 @@ fun AddTransactionScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = amount,
-                        onValueChange = { amount = it },
+                        onValueChange = {
+                            if (it.all { char -> char.isDigit() }) {
+                                amount = it
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("0") },
                         trailingIcon = { Text("đ", color = Color.Gray, modifier = Modifier.padding(end = 16.dp)) },
@@ -282,7 +287,36 @@ fun AddTransactionScreen(
             Button(
                 enabled = !isLoading,
                 onClick = {
-                    val amountValue = amount.toDoubleOrNull() ?: 0.0
+                    when {
+                        amount.isBlank() -> {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Vui lòng nhập số tiền",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+
+                        amount.toDoubleOrNull() == null -> {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Số tiền không hợp lệ",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+
+                        amount.toDouble() <= 0 -> {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Số tiền phải lớn hơn 0",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+                    }
+
+                    val amountValue = amount.toDouble()
 
                     if (isEditMode) {
                         viewModel.updateTransaction(

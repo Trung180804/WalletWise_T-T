@@ -1,4 +1,3 @@
-
 package com.example.walletwise.presentation.home
 
 import android.app.Activity
@@ -85,14 +84,12 @@ fun HomeScreen(
     onLogout: () -> Unit
 ) {
     val transactions by viewModel.transactions.collectAsState()
-    val totalBalance = transactions.sumOf { if (it.type == "Thu") it.amount else -it.amount }
     val formatMoney = NumberFormat.getCurrencyInstance(Locale("vi", "VN"))
 
     var selectedTab by remember { mutableStateOf(0) }
     val isDarkTheme = remember { mutableStateOf(false) }
     var isSubScreenOpen by remember { mutableStateOf(false) }
 
-    val footerBgColor = Color(0xFF4DD0E1)
     val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
     var selectedFilter by remember { mutableStateOf(filters[0]) }
     var selectedDateFilter by remember { mutableStateOf<LocalDate?>(null) }
@@ -102,14 +99,13 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     CompositionLocalProvider(LocalAppTheme provides isDarkTheme) {
-        // Thay thế các biến trong HomeScreen của bạn bằng bộ màu mới này
         val bgColor = Color(0xFFF8F9FA) // Nền trắng xám nhạt
         val cardColor = Color.White
         val topHeaderBrush = Brush.verticalGradient(
             colors = listOf(Color(0xFFE3F2FD), Color(0xFFF8F9FA)) // Xanh rất nhạt chuyển sang Trắng
         )
-        val footerBgColor = Color(0xFF2196F3) // Màu xanh đậm hơn một chút để làm điểm nhấn ở footer
-        val textColor = Color(0xFF2D3436) // Chữ xám đậm (không dùng đen tuyền)
+        val footerBgColor = Color(0xFF2196F3) // Màu xanh đậm hơn
+        val textColor = Color(0xFF2D3436) // Chữ xám đậm
 
         Scaffold(
             topBar = {
@@ -128,7 +124,7 @@ fun HomeScreen(
                                     color = Color(0xFF2196F3),
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(modifier = Modifier.weight(1f)) // Đẩy phần streak sang góc phải
+                                Spacer(modifier = Modifier.weight(1f))
 
                                 // Hiển thị lửa và số ngày
                                 if ((user?.currentStreak ?: 0) > 0) {
@@ -136,7 +132,7 @@ fun HomeScreen(
                                         Icon(
                                             imageVector = Icons.Filled.LocalFireDepartment,
                                             contentDescription = "Streak",
-                                            tint = Color(0xFFFF9800), // Màu cam của lửa
+                                            tint = Color(0xFFFF9800),
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
@@ -212,30 +208,47 @@ fun HomeScreen(
                 when (selectedTab) {
                     0 -> {
                         val today = LocalDate.now(ZoneId.systemDefault())
+                        val currentMonth = today.monthValue
+                        val currentYear = today.year
 
-                        // 2. Lọc ra các giao dịch CHỈ TRONG HÔM NAY
-                        val transactionsToday = transactions.filter { trans ->
+                        // 1. TÍNH TOÁN HEADER: Lọc ra các giao dịch TRONG THÁNG NÀY
+                        val transactionsThisMonth = transactions.filter { trans ->
                             val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-                            txDate == today
+                            txDate.monthValue == currentMonth && txDate.year == currentYear
                         }
 
-                        // 3. Tính Thu/Chi của riêng HÔM NAY
-                        val totalIncomeToday = transactionsToday.filter { it.type == "Thu" }.sumOf { it.amount }
-                        val totalExpenseToday = transactionsToday.filter { it.type == "Chi" }.sumOf { it.amount }
+                        val totalIncomeThisMonth = transactionsThisMonth
+                            .filter { it.type.trim().equals("Thu", ignoreCase = true) }
+                            .sumOf { it.amount }
 
-                        // 4. Tính SỐ DƯ TỔNG (Vẫn lấy từ danh sách 'transactions' tổng)
-                        val totalBalanceAll = transactions.sumOf { if (it.type == "Thu") it.amount else -it.amount }
+                        val totalExpenseThisMonth = transactionsThisMonth
+                            .filter { it.type.trim().equals("Chi", ignoreCase = true) }
+                            .sumOf { it.amount }
 
+                        // 2. TÍNH SỐ DƯ TỔNG (Toàn bộ lịch sử)
+                        val totalBalanceAll = totalIncomeThisMonth - totalExpenseThisMonth
+
+//                        // 3. DANH SÁCH HIỂN THỊ: Lọc theo ngày (mặc định hôm nay) và phương thức
+//                        val targetDate = selectedDateFilter ?: today
+//                        val displayedTransactions = transactions.filter { trans ->
+//                            val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
+//                            val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+//                            val matchDate = txDate == targetDate
+//                            matchMethod && matchDate
+//                        }.sortedByDescending { it.timestamp }
+                        // 3. DANH SÁCH HIỂN THỊ: Lọc theo ngày (mặc định 3 ngày gần nhất) và phương thức
                         val displayedTransactions = transactions.filter { trans ->
                             val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
                             val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
 
-                            // Nếu không có bộ lọc ngày nào được chọn (null), mặc định chỉ lấy ngày hôm nay (today)
-                            val matchDate = if (selectedDateFilter == null) {
-                                txDate == today
-                            } else {
+                            // Nếu có chọn ngày từ lịch thì hiển thị ngày đó, nếu không thì lấy 3 ngày gần đây
+                            val matchDate = if (selectedDateFilter != null) {
                                 txDate == selectedDateFilter
+                            } else {
+                                val threeDaysAgo = today.minusDays(2) // Trừ 2 ngày (Hôm kia, Hôm qua, Hôm nay)
+                                !txDate.isBefore(threeDaysAgo) && !txDate.isAfter(today)
                             }
+
                             matchMethod && matchDate
                         }.sortedByDescending { it.timestamp }
 
@@ -253,19 +266,19 @@ fun HomeScreen(
                                 ) {
                                     val darkColor = Color(0xFF2D3436)
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(text = "Chi tiêu", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
+                                        Text(text = "Chi tiêu (Tháng)", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalExpenseToday), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalExpenseThisMonth), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(text = "Thu nhập", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
+                                        Text(text = "Thu nhập (Tháng)", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalIncomeToday), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalIncomeThisMonth), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(text = "Số dư", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalBalance), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalBalanceAll), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                 }
                             }
@@ -297,13 +310,14 @@ fun HomeScreen(
                                                 colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF4DD0E1), labelColor = Color.White)
                                             )
                                         }
+                                    } else {
+                                        Text(text = "Giao dịch 3 ngày gần đây", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                                     }
+
                                     LazyRow(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
-
                                     ) {
-                                        // Sử dụng lazyItems để tránh lỗi xung đột thư viện
                                         lazyItems(items = filters) { filter ->
                                             val isSelected = selectedFilter == filter
                                             Box(
@@ -333,7 +347,6 @@ fun HomeScreen(
                                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                                             verticalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            // Sử dụng gridItems để tránh lỗi xung đột
                                             gridItems(items = displayedTransactions) { trans ->
                                                 TransactionGridItem(
                                                     transaction = trans,
@@ -352,7 +365,11 @@ fun HomeScreen(
                     }
 
                     1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date -> selectedDateFilter = date; selectedTab = 0 })
-                    2 -> AddTransactionScreen(viewModel = viewModel, onNavigateBack = { selectedTab = 0 })
+                    2 -> {
+                        LaunchedEffect(Unit) {
+                            onNavigateToAdd()
+                        }
+                    }
                     3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
                     4 -> ProfileScreen(user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
                 }
@@ -490,7 +507,7 @@ fun TransactionGridItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val isIncome = transaction.type == "Thu"
+    val isIncome = transaction.type.trim().equals("Thu", ignoreCase = true)
     val sign = if (isIncome) "+" else "-"
     val amountColor = if (isIncome) Color(0xFF4CAF50) else textColor
     val sdfTime = java.text.SimpleDateFormat("HH:mm", Locale("vi", "VN"))
@@ -498,7 +515,6 @@ fun TransactionGridItem(
     val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale("vi", "VN"))
     val fullDateString = sdfFullDate.format(java.util.Date(transaction.timestamp))
 
-    // Đã xóa biến showMenu của nút 3 chấm
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
 
@@ -516,7 +532,6 @@ fun TransactionGridItem(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = transaction.category, fontSize = 12.sp, color = Color.Gray, maxLines = 1)
                 }
-                // Nút 3 chấm đã được gỡ bỏ khỏi đây để giao diện thoáng hơn
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -575,7 +590,6 @@ fun TransactionGridItem(
                         }
                     }
 
-                    // KHU VỰC NÚT SỬA/XÓA MỚI
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),

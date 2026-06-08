@@ -129,10 +129,17 @@ class AuthViewModel(
 
     fun loadUserProfile() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        FirebaseFirestore.getInstance().collection("users").document(uid).get()
-            .addOnSuccessListener { doc ->
-                if (doc.exists()) {
-                    _currentUser.value = doc.toObject(com.example.walletwise.domain.model.User::class.java)
+
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(uid)
+            .addSnapshotListener { snapshot, error ->
+
+                if (error != null) return@addSnapshotListener
+
+                if (snapshot != null && snapshot.exists()) {
+                    _currentUser.value =
+                        snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
                 }
             }
     }

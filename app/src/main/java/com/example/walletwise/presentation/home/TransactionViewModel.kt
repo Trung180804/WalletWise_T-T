@@ -70,12 +70,16 @@ class TransactionViewModel(
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
         val todayStr = today.format(formatter)
 
-        val userRef = db.collection("USERS").document(currentUser.uid)
+        val userRef = db.collection("users")
+            .document(currentUser.uid)
 
         userRef.get().addOnSuccessListener { document ->
             if (document.exists()) {
-                val lastActiveStr = document.getString("lastActiveDate")
-                var currentStreak = document.getLong("streakCount")?.toInt() ?: 0
+                val lastActiveStr =
+                    document.getString("lastRecordDate")
+
+                var currentStreak =
+                    document.getLong("currentStreak")?.toInt() ?: 0
 
                 if (lastActiveStr == null) {
                     currentStreak = 1
@@ -113,8 +117,8 @@ class TransactionViewModel(
 
     private fun updateStreakToFirebase(userRef: com.google.firebase.firestore.DocumentReference, todayStr: String, streak: Int) {
         val updates = mapOf(
-            "lastActiveDate" to todayStr,
-            "streakCount" to streak
+            "lastRecordDate" to todayStr,
+            "currentStreak" to streak
         )
         userRef.set(updates, com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener {
