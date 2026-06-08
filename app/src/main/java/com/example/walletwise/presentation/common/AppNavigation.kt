@@ -1,11 +1,10 @@
 package com.example.walletwise.presentation.common
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.walletwise.data.repository.AuthRepositoryImpl
 import com.example.walletwise.presentation.auth.*
 import com.example.walletwise.presentation.home.AddTransactionScreen
 import com.example.walletwise.presentation.home.HomeScreen
@@ -22,10 +21,19 @@ fun AppNavigation(
 ) {
     val navController = rememberNavController()
 
-    val authRepository = remember { AuthRepositoryImpl() }
-    val startRoute = if (authRepository.isUserLoggedIn()) "home" else "login"
+    val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+
+    val startRoute = if (isLoggedIn) "home" else "login"
 
     val userState by authViewModel.currentUser.collectAsState()
+
+    LaunchedEffect(isLoggedIn) {
+        if (!isLoggedIn) {
+            navController.navigate("login") {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = startRoute) {
 
@@ -73,13 +81,6 @@ fun AppNavigation(
                 onLogout = {
 
                     authViewModel.logout()
-                    // 1. Đăng xuất Firebase trực tiếp
-                    FirebaseAuth.getInstance().signOut()
-
-                    // 2. Chuyển màn hình và "dọn sạch" toàn bộ stack cũ
-                    navController.navigate("login") {
-                        popUpTo(0) { inclusive = true } // Lệnh này xóa hết các màn hình cũ, không bị treo nữa
-                    }
                 }
             )
         }

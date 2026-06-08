@@ -226,7 +226,7 @@ fun HomeScreen(
                             .sumOf { it.amount }
 
                         // 2. TÍNH SỐ DƯ TỔNG (Toàn bộ lịch sử)
-                        val totalBalanceAll = totalIncomeThisMonth - totalExpenseThisMonth
+                        val totalBalanceThisMonth = totalIncomeThisMonth - totalExpenseThisMonth
 
 //                        // 3. DANH SÁCH HIỂN THỊ: Lọc theo ngày (mặc định hôm nay) và phương thức
 //                        val targetDate = selectedDateFilter ?: today
@@ -278,7 +278,7 @@ fun HomeScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(text = "Số dư", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalBalanceAll), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Text(text = formatMoney.format(totalBalanceThisMonth), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     }
                                 }
                             }
