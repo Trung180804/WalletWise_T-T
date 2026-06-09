@@ -66,8 +66,6 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
-val LocalAppTheme = compositionLocalOf<MutableState<Boolean>> { error("No Theme Found") }
-
 private val BannerGradient = Brush.linearGradient(
     colors = listOf(
         Color(0xFF1E3C72), // Blue đậm
@@ -87,7 +85,6 @@ fun HomeScreen(
     val formatMoney = NumberFormat.getCurrencyInstance(Locale("vi", "VN"))
 
     var selectedTab by remember { mutableStateOf(0) }
-    val isDarkTheme = remember { mutableStateOf(false) }
     var isSubScreenOpen by remember { mutableStateOf(false) }
 
     val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
@@ -98,368 +95,352 @@ fun HomeScreen(
     var showAIModal by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    CompositionLocalProvider(LocalAppTheme provides isDarkTheme) {
-        val bgColor = Color(0xFFF8F9FA) // Nền trắng xám nhạt
-        val cardColor = Color.White
-        val topHeaderBrush = Brush.verticalGradient(
-            colors = listOf(Color(0xFFE3F2FD), Color(0xFFF8F9FA)) // Xanh rất nhạt chuyển sang Trắng
-        )
-        val footerBgColor = Color(0xFF2196F3) // Màu xanh đậm hơn
-        val textColor = Color(0xFF2D3436) // Chữ xám đậm
+    val topHeaderBrush = Brush.verticalGradient(
+        colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), MaterialTheme.colorScheme.background)
+    )
+    val footerBgColor = MaterialTheme.colorScheme.surfaceVariant
 
-        Scaffold(
-            topBar = {
-                if (selectedTab == 0) {
-                    TopAppBar(
-                        title = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.logo),
-                                    contentDescription = "Logo WalletWise",
-                                    modifier = Modifier.size(36.dp).clip(CircleShape)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = "WalletWise",
-                                    color = Color(0xFF2196F3),
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.weight(1f))
+    Scaffold(
+        topBar = {
+            if (selectedTab == 0) {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo),
+                                contentDescription = "Logo WalletWise",
+                                modifier = Modifier.size(36.dp).clip(CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "WalletWise",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
 
-                                // Hiển thị lửa và số ngày
-                                if ((user?.currentStreak ?: 0) > 0) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Filled.LocalFireDepartment,
-                                            contentDescription = "Streak",
-                                            tint = Color(0xFFFF9800),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "${user?.currentStreak}",
-                                            color = Color(0xFFFF9800),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                        actions = {
-                            IconButton(onClick = { /* TODO */ }) {
-                                Icon(Icons.Default.Search, contentDescription = "Tìm kiếm", tint = Color(0xFF2D3436))
-                            }
-                            IconButton(onClick = { showLogoutDialog = true }) {
-                                Icon(Icons.Default.ExitToApp, contentDescription = "Đăng xuất", tint = Color(0xFF2D3436))
-                            }
-                        }
-                    )
-                }
-            },
-            floatingActionButton = {
-                if (selectedTab == 0 && !isSubScreenOpen) {
-                    Box(
-                        modifier = Modifier
-                            .offset(y = (-30).dp)
-                            .size(60.dp)
-                            .shadow(8.dp, CircleShape)
-                            .background(Brush.linearGradient(listOf(Color(0xFF9C27B0), Color(0xFFFA3B70))), CircleShape)
-                            .clickable { showAIModal = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "🤖", fontSize = 28.sp)
-                    }
-                }
-            },
-            bottomBar = {
-                if (!isSubScreenOpen) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(footerBgColor, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BottomBarItem(icon = Icons.Default.Home, isSelected = selectedTab == 0) { selectedTab = 0 }
-                        BottomBarItem(icon = Icons.Default.List, isSelected = selectedTab == 1) { selectedTab = 1 }
-                        Box(
-                            modifier = Modifier
-                                .offset(y = (-18).dp)
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(if (selectedTab == 2) Color(0xFFFFD700) else Color.White)
-                                .clickable { selectedTab = 2 },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = if (selectedTab == 2) Color.White else footerBgColor, modifier = Modifier.size(36.dp))
-                        }
-                        BottomBarItem(icon = Icons.Default.Settings, isSelected = selectedTab == 3) { selectedTab = 3 }
-                        BottomBarItem(icon = Icons.Default.Person, isSelected = selectedTab == 4) { selectedTab = 4 }
-                    }
-                }
-            },
-            containerColor = bgColor
-        ) { padding ->
-            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-                when (selectedTab) {
-                    0 -> {
-                        val today = LocalDate.now(ZoneId.systemDefault())
-                        val currentMonth = today.monthValue
-                        val currentYear = today.year
-
-                        // 1. TÍNH TOÁN HEADER: Lọc ra các giao dịch TRONG THÁNG NÀY
-                        val transactionsThisMonth = transactions.filter { trans ->
-                            val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-                            txDate.monthValue == currentMonth && txDate.year == currentYear
-                        }
-
-                        val totalIncomeThisMonth = transactionsThisMonth
-                            .filter { it.type.trim().equals("Thu", ignoreCase = true) }
-                            .sumOf { it.amount }
-
-                        val totalExpenseThisMonth = transactionsThisMonth
-                            .filter { it.type.trim().equals("Chi", ignoreCase = true) }
-                            .sumOf { it.amount }
-
-                        // 2. TÍNH SỐ DƯ TỔNG (Toàn bộ lịch sử)
-                        val totalBalanceThisMonth = totalIncomeThisMonth - totalExpenseThisMonth
-
-//                        // 3. DANH SÁCH HIỂN THỊ: Lọc theo ngày (mặc định hôm nay) và phương thức
-//                        val targetDate = selectedDateFilter ?: today
-//                        val displayedTransactions = transactions.filter { trans ->
-//                            val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
-//                            val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-//                            val matchDate = txDate == targetDate
-//                            matchMethod && matchDate
-//                        }.sortedByDescending { it.timestamp }
-                        // 3. DANH SÁCH HIỂN THỊ: Lọc theo ngày (mặc định 3 ngày gần nhất) và phương thức
-                        val displayedTransactions = transactions.filter { trans ->
-                            val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
-                            val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-
-                            // Nếu có chọn ngày từ lịch thì hiển thị ngày đó, nếu không thì lấy 3 ngày gần đây
-                            val matchDate = if (selectedDateFilter != null) {
-                                txDate == selectedDateFilter
-                            } else {
-                                val threeDaysAgo = today.minusDays(2) // Trừ 2 ngày (Hôm kia, Hôm qua, Hôm nay)
-                                !txDate.isBefore(threeDaysAgo) && !txDate.isAfter(today)
-                            }
-
-                            matchMethod && matchDate
-                        }.sortedByDescending { it.timestamp }
-
-                        Column(modifier = Modifier.fillMaxSize().background(topHeaderBrush)) {
-                            Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
-
-                                // GỌI BANNER TẠI ĐÂY
-                                HomeBannerCarousel(user = user)
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val darkColor = Color(0xFF2D3436)
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(text = "Chi tiêu (Tháng)", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalExpenseThisMonth), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    }
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(text = "Thu nhập (Tháng)", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalIncomeThisMonth), color = darkColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    }
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(text = "Số dư", color = darkColor.copy(alpha = 0.7f), fontSize = 12.sp)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(text = formatMoney.format(totalBalanceThisMonth), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    }
+                            // Hiển thị lửa và số ngày
+                            if ((user?.currentStreak ?: 0) > 0) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.LocalFireDepartment,
+                                        contentDescription = "Streak",
+                                        tint = Color(0xFFFF9800),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "${user?.currentStreak}",
+                                        color = Color(0xFFFF9800),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
                                 }
                             }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                                color = bgColor
-                            ) {
-                                Column(modifier = Modifier.padding(top = 10.dp, start = 16.dp, end = 16.dp)) {
-                                    if (selectedDateFilter != null) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(bottom = 8.dp)
-                                        ) {
-                                            Text(text = "Đang lọc ngày: ", color = Color.Gray, fontSize = 13.sp)
-                                            AssistChip(
-                                                onClick = { selectedDateFilter = null },
-                                                label = {
-                                                    Text(
-                                                        text = "${selectedDateFilter?.dayOfMonth}/${selectedDateFilter?.monthValue}",
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                },
-                                                trailingIcon = {
-                                                    Icon(Icons.Default.Clear, contentDescription = "Xóa", modifier = Modifier.size(16.dp))
-                                                },
-                                                colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF4DD0E1), labelColor = Color.White)
-                                            )
-                                        }
-                                    } else {
-                                        Text(text = "Giao dịch 3 ngày gần đây", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
-                                    }
-
-                                    LazyRow(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        lazyItems(items = filters) { filter ->
-                                            val isSelected = selectedFilter == filter
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(20.dp))
-                                                    .background(if (isSelected) Color(0xFF4DD0E1) else cardColor)
-                                                    .border(1.dp, if (isSelected) Color.Transparent else Color.LightGray, RoundedCornerShape(20.dp))
-                                                    .clickable { selectedFilter = filter }
-                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(text = filter, color = if (isSelected) Color.Black else Color.Gray, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(16.dp))
-
-                                    if (displayedTransactions.isEmpty()) {
-                                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                            Text(text = "Không có giao dịch nào.", color = Color.Gray)
-                                        }
-                                    } else {
-                                        LazyVerticalGrid(
-                                            columns = GridCells.Fixed(2),
-                                            contentPadding = PaddingValues(bottom = 100.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            gridItems(items = displayedTransactions) { trans ->
-                                                TransactionGridItem(
-                                                    transaction = trans,
-                                                    formatMoney = formatMoney,
-                                                    cardColor = cardColor,
-                                                    textColor = textColor,
-                                                    onEdit = { viewModel.transactionToEdit = trans; onNavigateToAdd() },
-                                                    onDelete = { viewModel.deleteTransaction(trans.id) }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date -> selectedDateFilter = date; selectedTab = 0 })
-                    2 -> {
-                        LaunchedEffect(Unit) {
-                            onNavigateToAdd()
-                        }
-                    }
-                    3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
-                    4 -> ProfileScreen(user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
-                }
-            }
-
-            // HỘP THOẠI TRỢ LÝ AI
-            if (showAIModal) {
-                ModalBottomSheet(
-                    onDismissRequest = { showAIModal = false; viewModel.resetAIState() },
-                    sheetState = sheetState,
-                    containerColor = cardColor
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp, start = 16.dp, end = 16.dp).imePadding()) {
-                        Text(text = "✨ Trợ lý Tài chính WalletWise", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (viewModel.isAIProcessing) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF4DD0E1))
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(text = "Trợ lý đang suy nghĩ...", color = Color.Gray)
-                            }
-                        } else {
-                            Text(text = viewModel.aiFeedbackMessage, fontSize = 16.sp, color = Color(0xFFFA3B70), fontWeight = FontWeight.Medium)
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (viewModel.aiPendingTransaction != null) {
-                            val tx = viewModel.aiPendingTransaction!!
-                            val context = LocalContext.current
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFF4DD0E1).copy(alpha = 0.1f),
-                                border = BorderStroke(1.dp, Color(0xFF4DD0E1).copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(text = "📝 Giao dịch mới:", fontWeight = FontWeight.Bold, color = textColor)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(text = "• Số tiền: ${formatMoney.format(tx.amount)}", color = textColor)
-                                    Text(text = "• Phân loại: ${tx.category} (${tx.type})", color = textColor)
-                                    Text(text = "• Nguồn: ${tx.paymentMethod}", color = textColor)
-                                    Text(text = "• Ghi chú: ${tx.note}", color = textColor)
-
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Button(
-                                        onClick = {
-                                            viewModel.addTransaction(
-                                                amount = tx.amount, type = tx.type, category = tx.category,
-                                                note = tx.note, paymentMethod = tx.paymentMethod, imageUri = null, context = context
-                                            ) { showAIModal = false; viewModel.resetAIState() }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                                    ) {
-                                        Text(text = "Xác nhận & Lưu", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-
-                        AIAssistantInputBar(textColor = textColor, onSend = { userInput -> viewModel.processAITransaction(userInput) })
-                    }
-                }
-            }
-
-            if (showLogoutDialog) {
-                AlertDialog(
-                    onDismissRequest = { showLogoutDialog = false },
-                    containerColor = cardColor,
-                    title = { Text(text = "Xác nhận đăng xuất", fontWeight = FontWeight.Bold, color = textColor) },
-                    text = { Text(text = "Bạn có chắc chắn muốn đăng xuất khỏi WalletWise không?", color = textColor, fontSize = 16.sp) },
-                    confirmButton = {
-                        Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) {
-                            Text(text = "Đăng xuất", color = Color.White, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(8.dp))
                         }
                     },
-                    dismissButton = {
-                        TextButton(onClick = { showLogoutDialog = false }) { Text(text = "Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) }
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    actions = {
+                        IconButton(onClick = { /* TODO */ }) {
+                            Icon(Icons.Default.Search, contentDescription = "Tìm kiếm", tint = MaterialTheme.colorScheme.onBackground)
+                        }
+                        IconButton(onClick = { showLogoutDialog = true }) {
+                            Icon(Icons.Default.ExitToApp, contentDescription = "Đăng xuất", tint = MaterialTheme.colorScheme.onBackground)
+                        }
                     }
                 )
             }
+        },
+        floatingActionButton = {
+            if (selectedTab == 0 && !isSubScreenOpen) {
+                Box(
+                    modifier = Modifier
+                        .offset(y = (-30).dp)
+                        .size(60.dp)
+                        .shadow(8.dp, CircleShape)
+                        .background(Brush.linearGradient(listOf(Color(0xFF9C27B0), Color(0xFFFA3B70))), CircleShape)
+                        .clickable { showAIModal = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "🤖", fontSize = 28.sp)
+                }
+            }
+        },
+        bottomBar = {
+            if (!isSubScreenOpen) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(footerBgColor, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BottomBarItem(icon = Icons.Default.Home, isSelected = selectedTab == 0) { selectedTab = 0 }
+                    BottomBarItem(icon = Icons.Default.List, isSelected = selectedTab == 1) { selectedTab = 1 }
+                    Box(
+                        modifier = Modifier
+                            .offset(y = (-18).dp)
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(if (selectedTab == 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                            .clickable { selectedTab = 2 },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = if (selectedTab == 2) MaterialTheme.colorScheme.onPrimary else footerBgColor, modifier = Modifier.size(36.dp))
+                    }
+                    BottomBarItem(icon = Icons.Default.Settings, isSelected = selectedTab == 3) { selectedTab = 3 }
+                    BottomBarItem(icon = Icons.Default.Person, isSelected = selectedTab == 4) { selectedTab = 4 }
+                }
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            when (selectedTab) {
+                0 -> {
+                    val today = LocalDate.now(ZoneId.systemDefault())
+                    val currentMonth = today.monthValue
+                    val currentYear = today.year
+
+                    // 1. TÍNH TOÁN HEADER: Lọc ra các giao dịch TRONG THÁNG NÀY
+                    val transactionsThisMonth = transactions.filter { trans ->
+                        val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+                        txDate.monthValue == currentMonth && txDate.year == currentYear
+                    }
+
+                    val totalIncomeThisMonth = transactionsThisMonth
+                        .filter { it.type.trim().equals("Thu", ignoreCase = true) }
+                        .sumOf { it.amount }
+
+                    val totalExpenseThisMonth = transactionsThisMonth
+                        .filter { it.type.trim().equals("Chi", ignoreCase = true) }
+                        .sumOf { it.amount }
+
+                    // 2. TÍNH SỐ DƯ TỔNG (Toàn bộ lịch sử)
+                    val totalBalanceThisMonth = totalIncomeThisMonth - totalExpenseThisMonth
+
+                    // 3. DANH SÁCH HIỂN THỊ: Lọc theo ngày (mặc định 3 ngày gần nhất) và phương thức
+                    val displayedTransactions = transactions.filter { trans ->
+                        val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
+                        val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
+
+                        // Nếu có chọn ngày từ lịch thì hiển thị ngày đó, nếu không thì lấy 3 ngày gần đây
+                        val matchDate = if (selectedDateFilter != null) {
+                            txDate == selectedDateFilter
+                        } else {
+                            val threeDaysAgo = today.minusDays(2) // Trừ 2 ngày (Hôm kia, Hôm qua, Hôm nay)
+                            !txDate.isBefore(threeDaysAgo) && !txDate.isAfter(today)
+                        }
+
+                        matchMethod && matchDate
+                    }.sortedByDescending { it.timestamp }
+
+                    Column(modifier = Modifier.fillMaxSize().background(topHeaderBrush)) {
+                        Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
+
+                            // GỌI BANNER TẠI ĐÂY
+                            HomeBannerCarousel(user = user)
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "Chi tiêu (Tháng)", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f), fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = formatMoney.format(totalExpenseThisMonth), color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "Thu nhập (Tháng)", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f), fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = formatMoney.format(totalIncomeThisMonth), color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "Số dư", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f), fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(text = formatMoney.format(totalBalanceThisMonth), color = Color(0xFFFA3B70), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Column(modifier = Modifier.padding(top = 10.dp, start = 16.dp, end = 16.dp)) {
+                                if (selectedDateFilter != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    ) {
+                                        Text(text = "Đang lọc ngày: ", color = Color.Gray, fontSize = 13.sp)
+                                        AssistChip(
+                                            onClick = { selectedDateFilter = null },
+                                            label = {
+                                                Text(
+                                                    text = "${selectedDateFilter?.dayOfMonth}/${selectedDateFilter?.monthValue}",
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            },
+                                            trailingIcon = {
+                                                Icon(Icons.Default.Clear, contentDescription = "Xóa", modifier = Modifier.size(16.dp))
+                                            },
+                                            colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.primary, labelColor = MaterialTheme.colorScheme.onPrimary)
+                                        )
+                                    }
+                                } else {
+                                    Text(text = "Giao dịch 3 ngày gần đây", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                                }
+
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    lazyItems(items = filters) { filter ->
+                                        val isSelected = selectedFilter == filter
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                                .border(1.dp, if (isSelected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
+                                                .clickable { selectedFilter = filter }
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(text = filter, color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp)
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                if (displayedTransactions.isEmpty()) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text(text = "Không có giao dịch nào.", color = Color.Gray)
+                                    }
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(2),
+                                        contentPadding = PaddingValues(bottom = 100.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        gridItems(items = displayedTransactions) { trans ->
+                                            TransactionGridItem(
+                                                transaction = trans,
+                                                formatMoney = formatMoney,
+                                                onEdit = { viewModel.transactionToEdit = trans; onNavigateToAdd() },
+                                                onDelete = { viewModel.deleteTransaction(trans.id) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date -> selectedDateFilter = date; selectedTab = 0 })
+                2 -> {
+                    LaunchedEffect(Unit) {
+                        onNavigateToAdd()
+                    }
+                }
+                3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
+                4 -> ProfileScreen(user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
+            }
+        }
+
+        // HỘP THOẠI TRỢ LÝ AI
+        if (showAIModal) {
+            ModalBottomSheet(
+                onDismissRequest = { showAIModal = false; viewModel.resetAIState() },
+                sheetState = sheetState,
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp, start = 16.dp, end = 16.dp).imePadding()) {
+                    Text(text = "✨ Trợ lý Tài chính WalletWise", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (viewModel.isAIProcessing) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(text = "Trợ lý đang suy nghĩ...", color = Color.Gray)
+                        }
+                    } else {
+                        Text(text = viewModel.aiFeedbackMessage, fontSize = 16.sp, color = Color(0xFFFA3B70), fontWeight = FontWeight.Medium)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (viewModel.aiPendingTransaction != null) {
+                        val tx = viewModel.aiPendingTransaction!!
+                        val context = LocalContext.current
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(text = "📝 Giao dịch mới:", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(text = "• Số tiền: ${formatMoney.format(tx.amount)}", color = MaterialTheme.colorScheme.onSurface)
+                                Text(text = "• Phân loại: ${tx.category} (${tx.type})", color = MaterialTheme.colorScheme.onSurface)
+                                Text(text = "• Nguồn: ${tx.paymentMethod}", color = MaterialTheme.colorScheme.onSurface)
+                                Text(text = "• Ghi chú: ${tx.note}", color = MaterialTheme.colorScheme.onSurface)
+
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.addTransaction(
+                                            amount = tx.amount, type = tx.type, category = tx.category,
+                                            note = tx.note, paymentMethod = tx.paymentMethod, imageUri = null, context = context
+                                        ) { showAIModal = false; viewModel.resetAIState() }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                                ) {
+                                    Text(text = "Xác nhận & Lưu", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    AIAssistantInputBar(onSend = { userInput -> viewModel.processAITransaction(userInput) })
+                }
+            }
+        }
+
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+                title = { Text(text = "Xác nhận đăng xuất", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                text = { Text(text = "Bạn có chắc chắn muốn đăng xuất khỏi WalletWise không?", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp) },
+                confirmButton = {
+                    Button(onClick = { showLogoutDialog = false; onLogout() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) {
+                        Text(text = "Đăng xuất", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) { Text(text = "Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) }
+                }
+            )
         }
     }
 }
 
 @Composable
-fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
+fun AIAssistantInputBar(onSend: (String) -> Unit) {
     var textInput by remember { mutableStateOf(TextFieldValue("")) }
     val context = LocalContext.current
     val speechLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
@@ -480,7 +461,7 @@ fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
         OutlinedTextField(
             value = textInput, onValueChange = { textInput = it }, modifier = Modifier.weight(1f),
             placeholder = { Text(text = "Nhập nội dung...", color = Color.Gray) }, shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF9C27B0), unfocusedBorderColor = Color.LightGray, focusedTextColor = textColor, unfocusedTextColor = textColor), maxLines = 4
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF9C27B0), unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant, focusedTextColor = MaterialTheme.colorScheme.onSurface, unfocusedTextColor = MaterialTheme.colorScheme.onSurface), maxLines = 4
         )
         Spacer(modifier = Modifier.width(12.dp))
         if (textInput.text.isBlank()) {
@@ -493,8 +474,8 @@ fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
 
 @Composable
 fun BottomBarItem(icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
-    Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(if (isSelected) Color(0xFFFFD700) else Color.Transparent).clickable { onClick() }, contentAlignment = Alignment.Center) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+    Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent).clickable { onClick() }, contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = null, tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
     }
 }
 
@@ -502,14 +483,12 @@ fun BottomBarItem(icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
 fun TransactionGridItem(
     transaction: Transaction,
     formatMoney: NumberFormat,
-    cardColor: Color,
-    textColor: Color,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val isIncome = transaction.type.trim().equals("Thu", ignoreCase = true)
     val sign = if (isIncome) "+" else "-"
-    val amountColor = if (isIncome) Color(0xFF4CAF50) else textColor
+    val amountColor = if (isIncome) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface
     val sdfTime = java.text.SimpleDateFormat("HH:mm", Locale("vi", "VN"))
     val timeString = sdfTime.format(java.util.Date(transaction.timestamp))
     val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale("vi", "VN"))
@@ -518,9 +497,9 @@ fun TransactionGridItem(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showDetailsDialog by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth().clickable { showDetailsDialog = true }, colors = CardDefaults.cardColors(containerColor = cardColor), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { showDetailsDialog = true }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Box(modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFF0F0F0)), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface), contentAlignment = Alignment.Center) {
                 if (!transaction.imageUrl.isNullOrEmpty()) {
                     AsyncImage(model = transaction.imageUrl, contentDescription = "Ảnh", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else { Text(text = "Không có ảnh", fontSize = 10.sp, color = Color.Gray) }
@@ -536,8 +515,8 @@ fun TransactionGridItem(
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(text = timeString, fontSize = 11.sp, color = Color.Gray)
-                Surface(color = Color.LightGray.copy(alpha = 0.2f), shape = RoundedCornerShape(12.dp)) {
-                    Text(text = transaction.paymentMethod, fontSize = 10.sp, color = Color.DarkGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp)) {
+                    Text(text = transaction.paymentMethod, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                 }
             }
         }
@@ -545,9 +524,9 @@ fun TransactionGridItem(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false }, containerColor = cardColor,
-            title = { Text(text = "Xác nhận xóa", fontWeight = FontWeight.Bold, color = textColor) },
-            text = { Text(text = "Bạn có chắc chắn muốn xóa giao dịch này không?", color = textColor, fontSize = 16.sp) },
+            onDismissRequest = { showDeleteDialog = false }, containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text(text = "Xác nhận xóa", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+            text = { Text(text = "Bạn có chắc chắn muốn xóa giao dịch này không?", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp) },
             confirmButton = { Button(onClick = { showDeleteDialog = false; onDelete() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) { Text(text = "Xóa", color = Color.White, fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text(text = "Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) } }
         )
@@ -555,10 +534,10 @@ fun TransactionGridItem(
 
     if (showDetailsDialog) {
         Dialog(onDismissRequest = { showDetailsDialog = false }) {
-            Surface(shape = RoundedCornerShape(24.dp), color = cardColor, modifier = Modifier.fillMaxWidth()) {
+            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Chi tiết", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
+                        Text(text = "Chi tiết", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         IconButton(onClick = { showDetailsDialog = false }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Clear, contentDescription = "Đóng", tint = Color.Gray) }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
@@ -568,9 +547,9 @@ fun TransactionGridItem(
                     }
                     Text(text = "$sign${formatMoney.format(transaction.amount)}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = amountColor)
                     Spacer(modifier = Modifier.height(24.dp))
-                    Column(modifier = Modifier.fillMaxWidth().background(Color.Gray.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).padding(16.dp)) {
                         @Composable
-                        fun InfoRow(label: String, value: String, valueColor: Color = textColor) {
+                        fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
                             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = label, color = Color.Gray, fontSize = 14.sp)
                                 Text(text = value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
@@ -581,11 +560,11 @@ fun TransactionGridItem(
                         InfoRow("Nguồn tiền", transaction.paymentMethod)
                         InfoRow("Thời gian", fullDateString)
                         if (transaction.note.isNotBlank()) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(text = "Ghi chú:", color = Color.Gray, fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text(text = transaction.note, color = textColor, fontSize = 14.sp)
+                                Text(text = transaction.note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                             }
                         }
                     }
@@ -614,10 +593,10 @@ fun TransactionGridItem(
                                 onEdit()
                             },
                             modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Sửa", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Sửa", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
