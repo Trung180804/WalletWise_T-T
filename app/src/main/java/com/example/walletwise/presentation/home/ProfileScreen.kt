@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.walletwise.R
+import com.example.walletwise.ui.theme.LocalAppTheme
 import java.text.DecimalFormat
 
 enum class ProfileRoute {
@@ -71,10 +72,7 @@ fun ProfileScreen(
         }
     }
 
-    val isDark = LocalAppTheme.current.value
-    val bgColor = if (isDark) Color(0xFF121212) else Color(0xFFF4F6F8)
-
-    Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         when (currentRoute) {
             ProfileRoute.MAIN -> MainProfileView(user, onLogout) { currentRoute = it }
             ProfileRoute.EDIT_PROFILE -> EditProfileView(user = user) { currentRoute = ProfileRoute.MAIN }
@@ -97,19 +95,13 @@ fun ProfileScreen(
 
 @Composable
 fun MainProfileView(
-    user: com.example.walletwise.domain.model.User?, // 👉 Trả lại tham số user để khớp với dòng 79
+    user: com.example.walletwise.domain.model.User?,
     onLogout: () -> Unit,
     onNavigate: (ProfileRoute) -> Unit
 ) {
-    val isLoggedIn = user != null // Kiểm tra trạng thái đăng nhập qua biến user
-
+    val isLoggedIn = user != null
     val email = user?.email ?: "Chưa đăng nhập"
-    // Lấy ký tự đầu của email làm Avatar, nếu chưa đăng nhập thì để chữ "N"
     val firstLetter = email.firstOrNull()?.uppercase() ?: "N"
-
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -136,7 +128,7 @@ fun MainProfileView(
         val displayName = user?.username?.takeIf { it.isNotBlank() } ?: "Thành viên"
         Text(
             text = if (isLoggedIn) displayName else "Người dùng",
-            color = textC,
+            color = MaterialTheme.colorScheme.onBackground,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
@@ -152,18 +144,17 @@ fun MainProfileView(
 
         Spacer(Modifier.height(32.dp))
 
-        // 👉 LOGIC NÚT ĐĂNG NHẬP / ĐĂNG XUẤT CHUẨN UX
         Button(
             onClick  = {
                 if (isLoggedIn) {
                     showLogoutDialog = true
                 } else {
-                    onLogout() // Gọi hàm này để quay về trang Login
+                    onLogout()
                 }
             },
             modifier = Modifier.fillMaxWidth().height(55.dp),
             colors   = ButtonDefaults.buttonColors(
-                containerColor = if (isDark) Color(0xFF333333) else Color(0xFFE0E0E0)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
             ),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -178,13 +169,12 @@ fun MainProfileView(
         Spacer(Modifier.height(100.dp))
     }
 
-    // ── HỘP THOẠI XÁC NHẬN ĐĂNG XUẤT ──
     if (showLogoutDialog && isLoggedIn) {
         Dialog(onDismissRequest = { showLogoutDialog = false }) {
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isDark) Color(0xFF1E1E1E) else Color.White
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
                 Column(
@@ -196,7 +186,7 @@ fun MainProfileView(
 
                     Text(
                         "Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?",
-                        color = textC,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 16.sp,
                         textAlign = TextAlign.Center
                     )
@@ -207,9 +197,12 @@ fun MainProfileView(
                         OutlinedButton(
                             onClick = { showLogoutDialog = false },
                             modifier = Modifier.weight(1f).height(50.dp),
-                            shape = CircleShape
+                            shape = CircleShape,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
                         ) {
-                            Text("Hủy bỏ", color = textC, fontWeight = FontWeight.Bold)
+                            Text("Hủy bỏ", fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(Modifier.width(12.dp))
@@ -240,9 +233,7 @@ data class CurrencyItem(val name: String, val code: String, val rateToUsd: Doubl
 @Composable
 fun CurrencyConverterView(onBack: () -> Unit) {
     val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-    val keyBg  = if (isDark) Color(0xFF2C2C2C) else Color(0xFFE0E0E0)
-    val df     = remember { DecimalFormat("#,##0.##") }
+    val df = remember { DecimalFormat("#,##0.##") }
 
     val allCurrencies = listOf(
         CurrencyItem("Việt Nam đồng", "VND", 25400.0),
@@ -388,12 +379,12 @@ fun CurrencyConverterView(onBack: () -> Unit) {
                     val bgColor    = when {
                         isEquals   -> Color(0xFFFF7043)
                         isOperator -> if (isDark) Color(0xFF3A2C2C) else Color(0xFFFFE0D6)
-                        else       -> keyBg
+                        else       -> MaterialTheme.colorScheme.surfaceVariant
                     }
                     val fgColor = when {
                         isEquals   -> Color.White
                         isOperator -> Color(0xFFFF7043)
-                        else       -> textC
+                        else       -> MaterialTheme.colorScheme.onSurface
                     }
 
                     Box(
@@ -416,16 +407,16 @@ fun CurrencyConverterView(onBack: () -> Unit) {
             Card(
                 shape  = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isDark) Color(0xFF1E1E1E) else Color.White
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Chọn tiền tệ", color = textC,
+                        "Chọn tiền tệ", color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 18.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Spacer(Modifier.height(8.dp))
                     allCurrencies.forEach { curr ->
                         Row(
@@ -442,10 +433,10 @@ fun CurrencyConverterView(onBack: () -> Unit) {
                                 .padding(vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(curr.name, color = textC, fontSize = 15.sp)
+                            Text(curr.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp)
                             Text(curr.code, color = Color.Gray, fontSize = 13.sp)
                         }
-                        if (curr != allCurrencies.last()) HorizontalDivider()
+                        if (curr != allCurrencies.last()) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
             }
@@ -459,7 +450,7 @@ fun CurrencyRow(
     isActive: Boolean, onClick: () -> Unit, onDropdownClick: () -> Unit
 ) {
     val isDark = LocalAppTheme.current.value
-    val textC  = if (isActive) Color(0xFFFFD700) else if (isDark) Color.White else Color.Black
+    val textC  = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     val rowBg  = if (isActive)
         (if (isDark) Color(0xFF2A2500) else Color(0xFFFFF9E0))
     else Color.Transparent
@@ -496,10 +487,6 @@ fun CurrencyRow(
 // ================================================================
 @Composable
 fun RemindersView(onBack: () -> Unit) {
-    val textC = if (LocalAppTheme.current.value) Color.White else Color.Black
-    var title    by remember { mutableStateOf("") }
-    var note     by remember { mutableStateOf("") }
-
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -508,13 +495,11 @@ fun RemindersView(onBack: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("Hủy", color = textC, fontSize = 16.sp, modifier = Modifier.clickable { onBack() })
-            Text("Thêm lời nhắc", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Hủy", color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, modifier = Modifier.clickable { onBack() })
+            Text("Thêm lời nhắc", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Icon(
-                Icons.Default.Check, "Lưu", tint = if (title.isNotBlank()) Color(0xFFFFD700) else Color.Gray,
-                modifier = Modifier.clickable {
-                    if (title.isNotBlank()) { onBack() }
-                }
+                Icons.Default.Check, "Lưu", tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onBack() }
             )
         }
         ThemedDivider()
@@ -525,6 +510,8 @@ fun RemindersView(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(Modifier.height(16.dp))
+            var title by remember { mutableStateOf("") }
+            var note  by remember { mutableStateOf("") }
             FormInputBlock("Tên mục nhắc nhở",   title, { title = it }, "Vd: Trả tiền nhà")
             FormInputBlock("Ghi chú",             note,  { note  = it }, "Vd: Tiền nhà tháng 5")
             FormStaticBlock("Tần suất nhắc nhở",  "Hàng ngày",         isDropdown = true)
@@ -540,7 +527,6 @@ fun RemindersView(onBack: () -> Unit) {
 // ================================================================
 @Composable
 fun AddRecurringView(onBack: () -> Unit) {
-    val textC   = if (LocalAppTheme.current.value) Color.White else Color.Black
     var title   by remember { mutableStateOf("") }
     var amount  by remember { mutableStateOf("") }
     var note    by remember { mutableStateOf("") }
@@ -553,10 +539,10 @@ fun AddRecurringView(onBack: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text("Hủy", color = textC, fontSize = 16.sp, modifier = Modifier.clickable { onBack() })
-            Text("Thêm định kỳ", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Hủy", color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, modifier = Modifier.clickable { onBack() })
+            Text("Thêm định kỳ", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Icon(
-                Icons.Default.Check, "Lưu", tint = if (title.isNotBlank()) Color(0xFFFFD700) else Color.Gray,
+                Icons.Default.Check, "Lưu", tint = if (title.isNotBlank()) MaterialTheme.colorScheme.primary else Color.Gray,
                 modifier = Modifier.clickable { if (title.isNotBlank()) onBack() }
             )
         }
@@ -599,11 +585,8 @@ fun SettingsMainView(onNavigate: (ProfileRoute) -> Unit, onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(8.dp))
             SettingsRowItem(Icons.Default.Edit,          "Cỡ chữ")             { onNavigate(ProfileRoute.FONT_SIZE) }
-
-            // Đã đổi Icon chuẩn để tránh lỗi AttachMoney
             SettingsRowItem(Icons.AutoMirrored.Filled.List, "Cài đặt danh mục")  { /* TODO */ }
             SettingsRowItem(Icons.Default.ShoppingCart, "Tiền tệ mặc định") { onNavigate(ProfileRoute.DEFAULT_CURRENCY) }
-
             SettingsRowItem(Icons.Default.Notifications, "Lời nhắc nhở")       { onNavigate(ProfileRoute.REMINDERS) }
             SettingsRowItem(Icons.Default.Refresh,       "Giao dịch định kỳ") { onNavigate(ProfileRoute.RECURRING) }
             ThemedDivider()
@@ -618,8 +601,6 @@ fun SettingsMainView(onNavigate: (ProfileRoute) -> Unit, onBack: () -> Unit) {
 // ================================================================
 @Composable
 fun FontSizeView(onBack: () -> Unit) {
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
     var fontSize by remember { mutableFloatStateOf(16f) }
     val presets = listOf("Nhỏ" to 13f, "Vừa" to 16f, "Lớn" to 20f, "Rất lớn" to 24f)
 
@@ -635,7 +616,7 @@ fun FontSizeView(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 shape  = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isDark) Color(0xFF1E1E1E) else Color(0xFFFFFFFF)
+                    containerColor = MaterialTheme.colorScheme.surface
                 ),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
@@ -646,8 +627,8 @@ fun FontSizeView(onBack: () -> Unit) {
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Text(
-                        "WalletWise giúp bạn quản lý\nchi tiêu thông minh hơn mỗi ngày.",
-                        color = textC,
+                        "WalletWise giúp bạn quản lý chi tiêu thông minh hơn mỗi ngày.",
+                                color = MaterialTheme.colorScheme.onSurface,
                         fontSize = fontSize.sp,
                         lineHeight = (fontSize * 1.5f).sp
                     )
@@ -655,14 +636,14 @@ fun FontSizeView(onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(32.dp))
-            Text("Cỡ chữ: ${fontSize.toInt()}sp", color = textC, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text("Cỡ chữ: ${fontSize.toInt()}sp", color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(8.dp))
             Slider(
                 value          = fontSize,
                 onValueChange  = { fontSize = it },
                 valueRange     = 12f..26f,
                 steps          = 6,
-                colors         = SliderDefaults.colors(thumbColor = Color(0xFFFFD700), activeTrackColor = Color(0xFFFFD700)),
+                colors         = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth()
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -671,27 +652,29 @@ fun FontSizeView(onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(32.dp))
-            Text("Preset nhanh", color = textC, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text("Preset nhanh", color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 presets.forEach { (label, size) ->
                     val isSelected = fontSize == size
+                    val bgBtn = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                    val fgBtn = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) Color(0xFFFFD700) else if (isDark) Color(0xFF2C2C2C) else Color(0xFFE0E0E0))
+                            .background(bgBtn)
                             .clickable { fontSize = size }
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(label, color = if (isSelected) Color.Black else textC, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, textAlign = TextAlign.Center)
+                        Text(label, color = fgBtn, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, textAlign = TextAlign.Center)
                     }
                 }
             }
 
             Spacer(Modifier.height(32.dp))
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(14.dp)) {
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(14.dp)) {
                 Text("Lưu cài đặt", color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -732,7 +715,7 @@ fun RecurringView(onAdd: () -> Unit, onBack: () -> Unit) {
         }
 
         Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-            Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(14.dp)) {
+            Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(14.dp)) {
                 Icon(Icons.Default.Add, null, tint = Color.Black)
                 Spacer(Modifier.width(8.dp))
                 Text("Thêm giao dịch định kỳ", color = Color.Black, fontWeight = FontWeight.Bold)
@@ -743,15 +726,12 @@ fun RecurringView(onAdd: () -> Unit, onBack: () -> Unit) {
 
 @Composable
 fun RecurringItemCard(item: RecurringItem) {
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-    val cardBg = if (isDark) Color(0xFF1E1E1E) else Color.White
-    val df     = remember { DecimalFormat("#,##0") }
+    val df = remember { DecimalFormat("#,##0") }
 
     Card(
         modifier  = Modifier.fillMaxWidth(),
         shape     = RoundedCornerShape(14.dp),
-        colors    = CardDefaults.cardColors(containerColor = cardBg),
+        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -763,7 +743,7 @@ fun RecurringItemCard(item: RecurringItem) {
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.title,     color = textC,         fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(item.title,     color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                 Text(item.frequency, color = Color.Gray,   fontSize = 12.sp)
                 Text(item.category,  color = item.iconColor, fontSize = 11.sp)
             }
@@ -781,13 +761,12 @@ fun RecurringItemCard(item: RecurringItem) {
 fun ThemeView(onBack: () -> Unit) {
     val appTheme = LocalAppTheme.current
     val isDark   = appTheme.value
-    val textC    = if (isDark) Color.White else Color.Black
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopHeader("Chủ đề", onBack)
 
         Column(modifier = Modifier.padding(24.dp)) {
-            Text("Chọn giao diện hiển thị", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("Chọn giao diện hiển thị", color = MaterialTheme.colorScheme.onBackground, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(24.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -804,19 +783,19 @@ fun ThemeView(onBack: () -> Unit) {
 fun ThemeOptionCard(label: String, bg: Color, fg: Color, isSelected: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick() }) {
         Box(
-            modifier = Modifier.size(110.dp).clip(RoundedCornerShape(16.dp)).border(width = if (isSelected) 3.dp else 1.dp, color = if (isSelected) Color(0xFFFFD700) else Color.Gray, shape = RoundedCornerShape(16.dp)).background(bg),
+            modifier = Modifier.size(110.dp).clip(RoundedCornerShape(16.dp)).border(width = if (isSelected) 3.dp else 1.dp, color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray, shape = RoundedCornerShape(16.dp)).background(bg),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(label, color = fg, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 if (isSelected) {
                     Spacer(Modifier.height(6.dp))
-                    Icon(Icons.Default.Check, null, tint = Color(0xFFFFD700), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
-        if (isSelected) Text("Đang dùng", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        if (isSelected) Text("Đang dùng", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -825,8 +804,6 @@ fun ThemeOptionCard(label: String, bg: Color, fg: Color, isSelected: Boolean, on
 // ================================================================
 @Composable
 fun DefaultCurrencyView(onBack: () -> Unit) {
-    val textC = if (LocalAppTheme.current.value) Color.White else Color.Black
-
     val currencies = listOf(
         "đồng Việt Nam ( ₫ )" to "VND",
         "Đô la Mĩ ( $ )" to "USD",
@@ -852,8 +829,8 @@ fun DefaultCurrencyView(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(name, color = textC, fontSize = 16.sp)
-                    Text(code, color = textC, fontSize = 15.sp)
+                    Text(name, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
+                    Text(code, color = MaterialTheme.colorScheme.onBackground, fontSize = 15.sp)
                 }
                 ThemedDivider()
             }
@@ -865,7 +842,6 @@ fun DefaultCurrencyView(onBack: () -> Unit) {
 fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () -> Unit) {
     val context = LocalContext.current
 
-    // 👉 Lấy dữ liệu thật từ model User, nếu null thì hiện mặc định
     val myId = user?.id?.takeIf { it.isNotBlank() } ?: "Chưa có ID"
     val realEmail = user?.email?.takeIf { it.isNotBlank() } ?: "Chưa có Email"
     val firstLetter = user?.username?.filter { it.isLetter() }?.firstOrNull()?.toString()?.uppercase() ?: "U"
@@ -874,62 +850,60 @@ fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () 
     var showGenderDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
 
-    // 👉 Khởi tạo state bằng tên thật của user
     var nickname by remember { mutableStateOf(user?.username ?: "Người dùng") }
     var gender by remember { mutableStateOf("Khác") }
-
-    val isDark = LocalAppTheme.current.value
-    val textC = if (isDark) Color.White else Color.Black
-    val surfaceC = if (isDark) Color(0xFF1E1E1E) else Color.White
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopHeader("Hồ sơ", onBack)
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Ảnh đại diện", color = textC, fontSize = 16.sp)
+                Text("Ảnh đại diện", color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
                 Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color(0xFFE91E63)), contentAlignment = Alignment.Center) {
                     Text(firstLetter, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 }
             }
             ThemedDivider()
 
-            // 👉 Hiển thị ID thật
             EditRowItem("ID", myId) {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("ID", myId))
                 Toast.makeText(context, "Đã sao chép ID", Toast.LENGTH_SHORT).show()
             }
 
-            // 👉 Hiển thị Email thật (Không cho sửa qua form này)
             EditRowItem("Email", realEmail) {
                 Toast.makeText(context, "Email không thể thay đổi tại đây", Toast.LENGTH_SHORT).show()
             }
 
-            // 👉 Hiển thị Biệt danh thật
             EditRowItem("Biệt danh", nickname) { showNameDialog = true }
             EditRowItem("Giới tính", gender) { showGenderDialog = true }
             EditRowItem("Đổi mật khẩu", "") { showPasswordDialog = true }
         }
     }
 
-    // Các popup dialog (ẩn khi chưa dùng)
     if (showNameDialog) {
         var tempName by remember { mutableStateOf(nickname) }
         Dialog(onDismissRequest = { showNameDialog = false }) {
-            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = surfaceC)) {
+            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(24.dp)) {
-                    Text("Biệt danh", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Text("Biệt danh", color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(value = tempName, onValueChange = { tempName = it }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textC, unfocusedTextColor = textC))
+                    OutlinedTextField(
+                        value = tempName,
+                        onValueChange = { tempName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
                     Spacer(Modifier.height(24.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        Button(onClick = { showNameDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, null, tint = Color.Black) }
+                        Button(onClick = { showNameDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Close, null, tint = Color.Black) }
                         Spacer(Modifier.width(16.dp))
                         Button(onClick = {
                             nickname = tempName
                             showNameDialog = false
-                            // TODO: Gọi ViewModel để update tên mới lên Firestore tại đây nếu cần
-                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Check, null, tint = Color.Black) }
+                        }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f)) { Icon(Icons.Default.Check, null, tint = Color.Black) }
                     }
                 }
             }
@@ -938,17 +912,17 @@ fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () 
 
     if (showGenderDialog) {
         Dialog(onDismissRequest = { showGenderDialog = false }) {
-            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = surfaceC)) {
+            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Giới tính", color = textC, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Icon(Icons.Default.Close, null, tint = textC, modifier = Modifier.clickable { showGenderDialog = false })
+                        Text("Giới tính", color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.clickable { showGenderDialog = false })
                     }
                     Spacer(Modifier.height(24.dp))
                     listOf("Khác", "Nữ giới", "Nam giới").forEach { opt ->
-                        Button(onClick = { gender = opt; showGenderDialog = false }, modifier = Modifier.fillMaxWidth().height(50.dp).padding(bottom = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)), shape = RoundedCornerShape(12.dp)) { Text(opt, color = Color.Black) }
+                        Button(onClick = { gender = opt; showGenderDialog = false }, modifier = Modifier.fillMaxWidth().height(50.dp).padding(bottom = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), shape = RoundedCornerShape(12.dp)) { Text(opt, color = Color.Black) }
                     }
-                    Text("Tôi không muốn tiết lộ!", color = textC, modifier = Modifier.padding(top = 16.dp).clickable { gender = "Bí mật"; showGenderDialog = false })
+                    Text("Tôi không muốn tiết lộ!", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 16.dp).clickable { gender = "Bí mật"; showGenderDialog = false })
                 }
             }
         }
@@ -959,7 +933,7 @@ fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () 
         var newPass by remember { mutableStateOf("") }
         var confirmPass by remember { mutableStateOf("") }
         Dialog(onDismissRequest = { showPasswordDialog = false }) {
-            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = surfaceC)) {
+            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Đổi mật khẩu", color = Color(0xFFFA3B70), fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(16.dp))
@@ -970,7 +944,7 @@ fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () 
                     OutlinedTextField(value = confirmPass, onValueChange = { confirmPass = it }, placeholder = { Text("Nhắc lại mật khẩu mới") }, modifier = Modifier.fillMaxWidth(), shape = CircleShape)
                     Spacer(Modifier.height(24.dp))
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { showPasswordDialog = false }, modifier = Modifier.weight(1f).height(50.dp), shape = CircleShape) { Text("Hủy bỏ", color = textC) }
+                        OutlinedButton(onClick = { showPasswordDialog = false }, modifier = Modifier.weight(1f).height(50.dp), shape = CircleShape) { Text("Hủy bỏ", color = MaterialTheme.colorScheme.onSurface) }
                         Spacer(Modifier.width(8.dp))
                         Button(onClick = { showPasswordDialog = false }, modifier = Modifier.weight(1f).height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFA3B70)), shape = CircleShape) { Text("Xác nhận", color = Color.White) }
                     }
@@ -985,10 +959,6 @@ fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () 
 // ================================================================
 @Composable
 fun AboutUsView(onBack: () -> Unit) {
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-    val cardBg = if (isDark) Color(0xFF1E1E1E) else Color.White
-
     Column(modifier = Modifier.fillMaxSize()) {
         TopHeader("Về chúng tôi", onBack)
 
@@ -1000,7 +970,6 @@ fun AboutUsView(onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // Logo / Icon app đã dùng hàm Image chuẩn
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -1017,15 +986,14 @@ fun AboutUsView(onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(16.dp))
-            Text("WalletWise", color = textC,     fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("WalletWise", color = MaterialTheme.colorScheme.onBackground, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text("Phiên bản 1.0.0",  color = Color.Gray, fontSize = 13.sp)
             Spacer(Modifier.height(32.dp))
 
-            // Thông tin nhóm
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(14.dp),
-                colors    = CardDefaults.cardColors(containerColor = cardBg),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
@@ -1041,11 +1009,11 @@ fun AboutUsView(onBack: () -> Unit) {
             Card(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(14.dp),
-                colors    = CardDefaults.cardColors(containerColor = cardBg),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("Mô tả ứng dụng", color = textC, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("Mô tả ứng dụng", color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "WalletWise là ứng dụng quản lý chi tiêu cá nhân " +
@@ -1063,8 +1031,6 @@ fun AboutUsView(onBack: () -> Unit) {
 
 @Composable
 fun AboutInfoRow(emoji: String, label: String, value: String) {
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1077,7 +1043,7 @@ fun AboutInfoRow(emoji: String, label: String, value: String) {
             Spacer(Modifier.width(10.dp))
             Text(label, color = Color.Gray, fontSize = 14.sp)
         }
-        Text(value, color = textC, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(value, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -1086,7 +1052,6 @@ fun AboutInfoRow(emoji: String, label: String, value: String) {
 // ================================================================
 @Composable
 fun TopHeader(title: String, onBack: () -> Unit) {
-    val textC = if (LocalAppTheme.current.value) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1096,13 +1061,13 @@ fun TopHeader(title: String, onBack: () -> Unit) {
     ) {
         Icon(
             Icons.AutoMirrored.Filled.ArrowBack, "Quay lại",
-            tint = textC,
+            tint = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier
                 .size(26.dp)
                 .clickable { onBack() }
         )
         Text(
-            title, color = textC,
+            title, color = MaterialTheme.colorScheme.onBackground,
             fontSize   = 19.sp,
             fontWeight = FontWeight.Bold,
             modifier   = Modifier.weight(1f),
@@ -1116,13 +1081,12 @@ fun TopHeader(title: String, onBack: () -> Unit) {
 @Composable
 fun ThemedDivider() {
     HorizontalDivider(
-        color = if (LocalAppTheme.current.value) Color(0xFF2C2C2C) else Color(0xFFE0E0E0)
+        color = MaterialTheme.colorScheme.outlineVariant
     )
 }
 
 @Composable
 fun MenuRowItem(icon: ImageVector, title: String, onClick: () -> Unit) {
-    val textC = if (LocalAppTheme.current.value) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1132,7 +1096,7 @@ fun MenuRowItem(icon: ImageVector, title: String, onClick: () -> Unit) {
     ) {
         Icon(icon, null, tint = Color.Gray, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
-        Text(title, color = textC, fontSize = 16.sp)
+        Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
         Spacer(Modifier.weight(1f))
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.Gray)
     }
@@ -1141,7 +1105,6 @@ fun MenuRowItem(icon: ImageVector, title: String, onClick: () -> Unit) {
 
 @Composable
 fun EditRowItem(title: String, value: String, onClick: () -> Unit) {
-    val textC = if (LocalAppTheme.current.value) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1150,7 +1113,7 @@ fun EditRowItem(title: String, value: String, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment     = Alignment.CenterVertically
     ) {
-        Text(title, color = textC, fontSize = 16.sp)
+        Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(value, color = Color.Gray, fontSize = 15.sp)
             Spacer(Modifier.width(6.dp))
@@ -1162,7 +1125,6 @@ fun EditRowItem(title: String, value: String, onClick: () -> Unit) {
 
 @Composable
 fun SettingsRowItem(icon: ImageVector, title: String, onClick: () -> Unit) {
-    val textC = if (LocalAppTheme.current.value) Color.White else Color.Black
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1170,9 +1132,9 @@ fun SettingsRowItem(icon: ImageVector, title: String, onClick: () -> Unit) {
             .height(68.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = Color(0xFFFFD700), modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
-        Text(title, color = textC, fontSize = 16.sp)
+        Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp)
         Spacer(Modifier.weight(1f))
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.Gray)
     }
@@ -1186,10 +1148,6 @@ fun FormInputBlock(
     onValueChange: (String) -> Unit,
     placeholder  : String
 ) {
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-    val bg     = if (isDark) Color(0xFF1E1E1E) else Color(0xFFEEEEEE)
-
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(bottom = 16.dp)) {
@@ -1197,16 +1155,16 @@ fun FormInputBlock(
             Box(modifier = Modifier
                 .width(4.dp)
                 .height(16.dp)
-                .background(Color(0xFFFFD700)))
+                .background(MaterialTheme.colorScheme.primary))
             Spacer(Modifier.width(8.dp))
-            Text(title, color = textC, fontSize = 14.sp)
+            Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp)
         }
         Spacer(Modifier.height(8.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(bg)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             contentAlignment = Alignment.CenterStart
         ) {
@@ -1214,7 +1172,7 @@ fun FormInputBlock(
             BasicTextField(
                 value         = value,
                 onValueChange = onValueChange,
-                textStyle     = TextStyle(color = textC, fontSize = 14.sp),
+                textStyle     = TextStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp),
                 modifier      = Modifier.fillMaxWidth()
             )
         }
@@ -1223,10 +1181,6 @@ fun FormInputBlock(
 
 @Composable
 fun FormStaticBlock(title: String, value: String, isDropdown: Boolean = false) {
-    val isDark = LocalAppTheme.current.value
-    val textC  = if (isDark) Color.White else Color.Black
-    val bg     = if (isDark) Color(0xFF1E1E1E) else Color(0xFFEEEEEE)
-
     Column(modifier = Modifier
         .fillMaxWidth()
         .padding(bottom = 16.dp)) {
@@ -1234,22 +1188,22 @@ fun FormStaticBlock(title: String, value: String, isDropdown: Boolean = false) {
             Box(modifier = Modifier
                 .width(4.dp)
                 .height(16.dp)
-                .background(Color(0xFFFFD700)))
+                .background(MaterialTheme.colorScheme.primary))
             Spacer(Modifier.width(8.dp))
-            Text(title, color = textC, fontSize = 14.sp)
+            Text(title, color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp)
         }
         Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(bg)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment     = Alignment.CenterVertically
         ) {
-            Text(value, color = textC, fontSize = 14.sp)
-            if (isDropdown) Icon(Icons.Default.ArrowDropDown, null, tint = textC)
+            Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+            if (isDropdown) Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

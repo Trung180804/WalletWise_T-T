@@ -73,7 +73,6 @@ fun AddTransactionScreen(
     var selectedWallet by remember { mutableStateOf(txToEdit?.paymentMethod ?: "Tiền mặt") }
 
     val mainColor = if (type == "Chi") Color(0xFFFA3B70) else Color(0xFF00C875)
-    val bgColor = Color(0xFFF8F9FA)
     val currentCategories = if (type == "Chi") expenseCategories else incomeCategories
 
     val isLoading by viewModel.isLoading.collectAsState()
@@ -115,21 +114,22 @@ fun AddTransactionScreen(
     }
 
     Scaffold(
-        containerColor = Color.White,
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp),
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = {
                     Text(
                         text = if (isEditMode) "Sửa giao dịch" else "Thêm giao dịch",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { handleBack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Quay lại", tint = MaterialTheme.colorScheme.onBackground)
                     }
                 },
             )
@@ -156,7 +156,7 @@ fun AddTransactionScreen(
             Box(
                 modifier = Modifier
                     .size(160.dp)
-                    .background(bgColor, RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp))
                     .clickable { launchCamera() },
                 contentAlignment = Alignment.Center
             ) {
@@ -178,14 +178,14 @@ fun AddTransactionScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("📷", fontSize = 40.sp)
                     }
-                    Box(modifier = Modifier.align(Alignment.BottomCenter).offset(y = 16.dp).size(40.dp).background(Color.White, CircleShape).border(3.dp, Color(0xFF9C27B0), CircleShape))
+                    Box(modifier = Modifier.align(Alignment.BottomCenter).offset(y = 16.dp).size(40.dp).background(MaterialTheme.colorScheme.surface, CircleShape).border(3.dp, Color(0xFF9C27B0), CircleShape))
                 }
             }
 
 
             // Số tiền & Wallet
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Số tiền", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.DarkGray)
+                Text("Số tiền", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
@@ -196,11 +196,16 @@ fun AddTransactionScreen(
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("0") },
+                        placeholder = { Text("0", color = Color.Gray) },
                         trailingIcon = { Text("đ", color = Color.Gray, modifier = Modifier.padding(end = 16.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.LightGray, focusedBorderColor = mainColor)
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedBorderColor = mainColor,
+                            focusedTextColor = MaterialTheme.colorScheme.onBackground,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
+                        )
                     )
 
                     Spacer(modifier = Modifier.width(12.dp))
@@ -211,26 +216,26 @@ fun AddTransactionScreen(
 
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Color.LightGray),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                             modifier = Modifier
                                 .height(56.dp)
                                 .clickable { expandedWallet = true },
                             color = Color.Transparent
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
-                                Text(selectedWallet, fontWeight = FontWeight.Bold)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                Text(selectedWallet, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground)
                             }
                         }
 
                         DropdownMenu(
                             expanded = expandedWallet,
                             onDismissRequest = { expandedWallet = false },
-                            modifier = Modifier.background(Color.White)
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
                         ) {
                             wallets.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option, color = Color.Black) },
+                                    text = { Text(option, color = MaterialTheme.colorScheme.onSurface) },
                                     onClick = {
                                         selectedWallet = option
                                         expandedWallet = false
@@ -246,7 +251,7 @@ fun AddTransactionScreen(
 
             // Danh mục
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Danh mục", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.DarkGray)
+                Text("Danh mục", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(12.dp))
 
                 FlowRow(
@@ -269,7 +274,7 @@ fun AddTransactionScreen(
 
             // Ghi chú
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text("Ghi chú", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.DarkGray)
+                Text("Ghi chú", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = note,
@@ -277,7 +282,12 @@ fun AddTransactionScreen(
                     modifier = Modifier.fillMaxWidth().height(100.dp),
                     placeholder = { Text("Thêm ghi chú...", color = Color.Gray) },
                     shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.LightGray, focusedBorderColor = mainColor)
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedBorderColor = mainColor,
+                        focusedTextColor = MaterialTheme.colorScheme.onBackground,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onBackground
+                    )
                 )
             }
 
@@ -368,7 +378,7 @@ fun AnimatedSegmentedSlider(
             .fillMaxWidth()
             .height(52.dp)
             .clip(RoundedCornerShape(26.dp))
-            .background(Color(0xFFF0F4F8)) // Màu xám nền nhạt
+            .background(MaterialTheme.colorScheme.surfaceVariant) // Màu nền nhạt theo theme
             .clickable(interactionSource = interactionSource, indication = null) {
                 onTypeChange(if (isIncome) "Chi" else "Thu")
             }
@@ -397,10 +407,10 @@ fun AnimatedSegmentedSlider(
             // Text hiển thị
             Row(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = interactionSource, indication = null) { onTypeChange("Chi") }, contentAlignment = Alignment.Center) {
-                    Text("Chi tiêu", color = if (!isIncome) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Chi tiêu", color = if (!isIncome) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
                 Box(modifier = Modifier.weight(1f).fillMaxHeight().clickable(interactionSource = interactionSource, indication = null) { onTypeChange("Thu") }, contentAlignment = Alignment.Center) {
-                    Text("Thu nhập", color = if (isIncome) Color.White else Color.Gray, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Thu nhập", color = if (isIncome) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
             }
         }
@@ -409,8 +419,7 @@ fun AnimatedSegmentedSlider(
 
 @Composable
 fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, onClick: () -> Unit) {
-    // 👉 Tinh chỉnh lại bộ màu sắc cho mềm mại
-    val unselectedBgColor = Color(0xFFF0F4F8) // Xám pastel sáng, sạch sẽ
+    val unselectedBgColor = MaterialTheme.colorScheme.surfaceVariant // Màu nền theo theme thay vì xám cố định
     val selectedBgColor = activeColor.copy(alpha = 0.15f) // Pha màu chủ đạo nhạt đi 15%
 
     Column(
@@ -440,7 +449,7 @@ fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, on
         Text(
             text = item.name,
             fontSize = 11.sp,
-            color = if (isSelected) activeColor else Color.DarkGray,
+            color = if (isSelected) activeColor else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
         )

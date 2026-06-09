@@ -53,7 +53,7 @@ fun HistoryScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF5F7FA))
+            .background(MaterialTheme.colorScheme.background)
             .padding(top = 16.dp, start = 16.dp, end = 16.dp)
     ) {
 
@@ -63,7 +63,7 @@ fun HistoryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { currentYearMonth = currentYearMonth.minusMonths(1) }) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Trở lại", tint = Color(0xFF4DD0E1))
+                Icon(Icons.Default.ArrowBack, contentDescription = "Trở lại", tint = MaterialTheme.colorScheme.primary)
             }
 
             Row(
@@ -72,7 +72,7 @@ fun HistoryScreen(
             ) {
                 Text(
                     text = "tháng ${currentYearMonth.monthValue} ${currentYearMonth.year}",
-                    color = Color(0xFF2D3436),
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -83,7 +83,7 @@ fun HistoryScreen(
                     Icon(
                         Icons.Default.Refresh,
                         contentDescription = "Tháng hiện tại",
-                        tint = Color(0xFFFFD700),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .size(20.dp)
                             .clickable { currentYearMonth = YearMonth.now() }
@@ -92,7 +92,7 @@ fun HistoryScreen(
             }
 
             IconButton(onClick = { currentYearMonth = currentYearMonth.plusMonths(1) }) {
-                Icon(Icons.Default.ArrowForward, contentDescription = "Tiếp", tint = Color(0xFF4DD0E1))
+                Icon(Icons.Default.ArrowForward, contentDescription = "Tiếp", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -159,7 +159,7 @@ fun DayCell(
     // Lấy danh sách ảnh từ các giao dịch trong ngày
     val images = transactions.mapNotNull { it.imageUrl }.filter { it.isNotEmpty() }
 
-    val todayBgColor = Color(0xFFE3F2FD)
+    val todayBgColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
     Box(
         modifier = Modifier
             .aspectRatio(0.65f) // Chỉnh tỷ lệ ô lịch dài hơn một chút để chứa vừa ảnh và số ngày
@@ -187,7 +187,7 @@ fun DayCell(
                             .fillMaxSize(0.85f) // Nhỏ hơn ảnh chính một chút
                             .offset(x = (-6).dp, y = (-6).dp) // Lệch về góc trái trên
                             .clip(RoundedCornerShape(12.dp))
-                            .border(2.dp, Color.White, RoundedCornerShape(12.dp)),
+                            .border(2.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -199,7 +199,7 @@ fun DayCell(
                     modifier = Modifier
                         .fillMaxSize(0.9f) // Chiếm 90% diện tích ô vuông
                         .clip(RoundedCornerShape(12.dp))
-                        .border(2.dp, Color.White, RoundedCornerShape(12.dp)),
+                        .border(2.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
 
@@ -209,13 +209,13 @@ fun DayCell(
                         modifier = Modifier
                             .align(Alignment.TopEnd) // Neo vào góc trên cùng bên phải
                             .offset(x = 6.dp, y = (-4).dp)
-                            .background(Color.White, RoundedCornerShape(8.dp)) // Nền trắng bo góc như ảnh mẫu
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp)) // Nền trắng bo góc như ảnh mẫu
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "+${images.size - 1}",
-                            color = Color.Black, // Chữ đen nổi bật trên nền trắng
+                            color = MaterialTheme.colorScheme.onSurface, // Chữ đen nổi bật trên nền trắng
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -227,7 +227,7 @@ fun DayCell(
         // 2. HIỂN THỊ NGÀY (Nằm ở dưới đáy ô lịch)
         Text(
             text = date.dayOfMonth.toString(),
-            color = if (isToday) Color(0xFF2196F3) else Color(0xFF2D3436),
+            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
             fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
             fontSize = 13.sp,
             modifier = Modifier
@@ -254,7 +254,7 @@ fun MonthPickerDialog(
             modifier = Modifier
                 .fillMaxWidth(0.85f)
                 .clip(RoundedCornerShape(24.dp))
-                .background(Color.White)
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp)
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -265,16 +265,16 @@ fun MonthPickerDialog(
                 ) {
                     IconButton(
                         onClick = { tempYear-- },
-                        modifier = Modifier.background(Color(0xFFF0F0F0), CircleShape).size(36.dp)
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(36.dp)
                     ) {
-                        Icon(Icons.Default.ArrowBack, "Năm trước", tint = Color.Black)
+                        Icon(Icons.Default.ArrowBack, "Năm trước", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(text = tempYear.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                    Text(text = tempYear.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     IconButton(
                         onClick = { tempYear++ },
-                        modifier = Modifier.background(Color(0xFFF0F0F0), CircleShape).size(36.dp)
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).size(36.dp)
                     ) {
-                        Icon(Icons.Default.ArrowForward, "Năm sau", tint = Color.Black)
+                        Icon(Icons.Default.ArrowForward, "Năm sau", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -290,17 +290,19 @@ fun MonthPickerDialog(
                     items(totalMonths) { index ->
                         val month = index + 1
                         val isSelected = tempMonth == month
+                        val bgBtn = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                        val fgBtn = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) Color(0xFFFFD700) else Color(0xFFF8F9FA))
+                                .background(bgBtn)
                                 .clickable { tempMonth = month }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = month.toString(),
-                                color = if (isSelected) Color.Black else Color.DarkGray,
+                                color = fgBtn,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 16.sp
                             )
@@ -315,7 +317,7 @@ fun MonthPickerDialog(
                         Icon(Icons.Default.Close, contentDescription = "Hủy", tint = Color.Gray, modifier = Modifier.size(32.dp))
                     }
                     IconButton(onClick = { onConfirm(YearMonth.of(tempYear, tempMonth)) }) {
-                        Icon(Icons.Default.Check, contentDescription = "Xác nhận", tint = Color.Black, modifier = Modifier.size(32.dp))
+                        Icon(Icons.Default.Check, contentDescription = "Xác nhận", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                     }
                 }
             }

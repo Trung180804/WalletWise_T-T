@@ -92,12 +92,6 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
 
     LaunchedEffect(selectedTimeTab) { timeOffset = 0 }
 
-    val bgColor = Color(0xFFF5F7FA) // Nền nhạt
-    val cardColor = Color.White      // Thẻ trắng
-    val textColor = Color(0xFF2D3436) // Chữ xám đậm
-    val primaryBlue = Color(0xFF2196F3) // Xanh chủ đạo
-    val grayText = Color(0xFF636E72)
-
     val timeData = remember(selectedTimeTab, timeOffset) {
         val calendar = Calendar.getInstance()
         var start = 0L
@@ -220,8 +214,8 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            containerColor = Color.White,
-            title = { Text("Chọn thời gian", color = textColor, fontWeight = FontWeight.Bold) },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("Chọn thời gian", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold) },
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                     items(25) { index ->
@@ -229,74 +223,74 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                         val label = getTimeLabel(selectedTimeTab, offset)
                         Text(
                             text = label,
-                            color = if (offset == timeOffset) primaryBlue else textColor,
+                            color = if (offset == timeOffset) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.fillMaxWidth().clickable { timeOffset = offset; showTimePicker = false }.padding(12.dp)
                         )
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showTimePicker = false }) { Text("Đóng", color = primaryBlue) } }
+            confirmButton = { TextButton(onClick = { showTimePicker = false }) { Text("Đóng", color = MaterialTheme.colorScheme.primary) } }
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(bgColor)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TabRow(
             selectedTabIndex = mainTab,
-            containerColor = Color.White,
-            contentColor = primaryBlue,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
             indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(tabPositions[mainTab]), color = primaryBlue)
+                TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(tabPositions[mainTab]), color = MaterialTheme.colorScheme.primary)
             }
         ) {
             listOf("Tổng quan", "Biểu đồ").forEachIndexed { index, title ->
                 Tab(
                     selected = mainTab == index, onClick = { mainTab = index },
-                    text = { Text(title, fontWeight = FontWeight.Bold, color = if (mainTab == index) primaryBlue else grayText) }
+                    text = { Text(title, fontWeight = FontWeight.Bold, color = if (mainTab == index) MaterialTheme.colorScheme.primary else Color.Gray) }
                 )
             }
         }
 
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth().border(1.dp, Color.LightGray, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).background(Color.White), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Row(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf("Tuần", "Tháng", "Năm").forEachIndexed { index, title ->
                     Box(
-                        modifier = Modifier.weight(1f).background(if (selectedTimeTab == index) primaryBlue else Color.Transparent).clickable { selectedTimeTab = index }.padding(vertical = 10.dp),
+                        modifier = Modifier.weight(1f).background(if (selectedTimeTab == index) MaterialTheme.colorScheme.primary else Color.Transparent).clickable { selectedTimeTab = index }.padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
-                    ) { Text(text = title, color = if (selectedTimeTab == index) Color.White else grayText, fontWeight = if (selectedTimeTab == index) FontWeight.Bold else FontWeight.Normal) }
+                    ) { Text(text = title, color = if (selectedTimeTab == index) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (selectedTimeTab == index) FontWeight.Bold else FontWeight.Normal) }
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { timeOffset -= 1 }) { Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = textColor) }
+                    IconButton(onClick = { timeOffset -= 1 }) { Icon(Icons.Default.KeyboardArrowLeft, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground) }
                     Row(modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { showTimePicker = true }.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = displayLabel, color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = grayText)
+                        Text(text = displayLabel, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
                     }
-                    IconButton(onClick = { timeOffset += 1 }, enabled = timeOffset < 0) { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = if (timeOffset < 0) textColor else Color.LightGray) }
+                    IconButton(onClick = { timeOffset += 1 }, enabled = timeOffset < 0) { Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = if (timeOffset < 0) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.outlineVariant) }
                 }
                 Box {
-                    Surface(color = Color.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.LightGray), onClick = { expandedDropdown = true }) {
+                    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), onClick = { expandedDropdown = true }) {
                         Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(txTypes[selectedTxType], color = textColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = textColor)
+                            Text(txTypes[selectedTxType], color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
-                    DropdownMenu(expanded = expandedDropdown, onDismissRequest = { expandedDropdown = false }, modifier = Modifier.background(Color.White)) {
+                    DropdownMenu(expanded = expandedDropdown, onDismissRequest = { expandedDropdown = false }, modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
                         txTypes.forEachIndexed { index, title ->
-                            DropdownMenuItem(text = { Text(title, color = textColor) }, onClick = { selectedTxType = index; expandedDropdown = false })
+                            DropdownMenuItem(text = { Text(title, color = MaterialTheme.colorScheme.onSurface) }, onClick = { selectedTxType = index; expandedDropdown = false })
                         }
                     }
                 }
             }
         }
-        Divider(color = Color.LightGray, thickness = 0.5.dp)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
 
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             if (mainTab == 0) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor), elevation = CardDefaults.cardElevation(2.dp)) {
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(2.dp)) {
                         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("⬇ Thu nhập", color = ColorIncome, fontWeight = FontWeight.Bold)
@@ -307,49 +301,49 @@ fun StatisticsScreen(transactions: List<Transaction>, formatMoney: NumberFormat)
                                 Text("⬆ Chi phí", color = ColorExpense, fontWeight = FontWeight.Bold)
                                 Text("-${formatMoney.format(totalExpense)}", color = ColorExpense, fontWeight = FontWeight.Bold)
                             }
-                            Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray)
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 // SỬA TẠI ĐÂY: Thay "Số dư" thành "Chênh lệch" để sửa lỗi logic gây hiểu nhầm
-                                Text("Chênh lệch", color = textColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text(formatMoney.format(netCashFlow), color = if (netCashFlow >= 0) primaryBlue else ColorExpense, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("Chênh lệch", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text(formatMoney.format(netCashFlow), color = if (netCashFlow >= 0) MaterialTheme.colorScheme.primary else ColorExpense, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("Chi tiết theo danh mục", color = textColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text("Chi tiết theo danh mục", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
 
                 if (categoryTotals.isEmpty()) {
-                    item { Text("Chưa có dữ liệu", color = textColor, modifier = Modifier.padding(top = 16.dp)) }
+                    item { Text("Chưa có dữ liệu", color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(top = 16.dp)) }
                 } else {
                     items(categoryTotals.size) { index ->
-                        CategoryProgressItem(categoryTotals[index], totalIncome, totalExpense, formatMoney, index, textColor)
+                        CategoryProgressItem(categoryTotals[index], totalIncome, totalExpense, formatMoney, index)
                     }
                 }
             } else {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(if (selectedTxType == 0) "Tỷ lệ Thu / Chi" else "Chi tiết theo danh mục", color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(if (selectedTxType == 0) "Tỷ lệ Thu / Chi" else "Chi tiết theo danh mục", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
+                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         // Truyền netCashFlow xuống thay vì balance
                         DonutChart(categoryTotals, selectedTxType, totalIncome, totalExpense, netCashFlow, formatMoney)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text(chartTitle, color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(chartTitle, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Card(modifier = Modifier.fillMaxWidth().height(220.dp), colors = CardDefaults.cardColors(containerColor = cardColor)) {
+                    Card(modifier = Modifier.fillMaxWidth().height(220.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         SimpleBarChart(dynamicChartData, selectedTxType)
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("Xu hướng (Đường)", color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Xu hướng (Đường)", color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Card(modifier = Modifier.fillMaxWidth().height(220.dp), colors = CardDefaults.cardColors(containerColor = cardColor)) {
+                    Card(modifier = Modifier.fillMaxWidth().height(220.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         SimpleLineChart(dynamicChartData, selectedTxType)
                     }
                     Spacer(modifier = Modifier.height(100.dp))
@@ -367,19 +361,19 @@ fun ChartLegend(typeFilter: Int) {
         if (typeFilter == 0 || typeFilter == 1) {
             Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(ColorIncome))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Thu nhập", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text("Thu nhập", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.width(24.dp))
         }
         if (typeFilter == 0 || typeFilter == 2) {
             Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(ColorExpense))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Chi phí", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text("Chi phí", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
 
 @Composable
-fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Double, totalExpense: Double, formatMoney: NumberFormat, index: Int, textColor: Color) {
+fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Double, totalExpense: Double, formatMoney: NumberFormat, index: Int) {
     val isIncome = item.second.trim().equals("Thu", ignoreCase = true)
     val sign = if (isIncome) "+" else "-"
     val amountColor = if (isIncome) ColorIncome else ColorExpense
@@ -396,11 +390,11 @@ fun CategoryProgressItem(item: Triple<String, String, Double>, totalIncome: Doub
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${item.first}  ${String.format("%.1f%%", percentage * 100)}", color = textColor, fontSize = 14.sp)
+                Text("${item.first}  ${String.format("%.1f%%", percentage * 100)}", color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp)
                 Text("$sign${formatMoney.format(item.third)}", color = amountColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            LinearProgressIndicator(progress = { percentage }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = barColor, trackColor = Color(0xFFEEEEEE))
+            LinearProgressIndicator(progress = { percentage }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)), color = barColor, trackColor = MaterialTheme.colorScheme.surfaceVariant)
         }
     }
 }
@@ -444,7 +438,7 @@ fun DonutChart(categoryTotals: List<Triple<String, String, Double>>, typeFilter:
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(centerLabel, color = Color.Gray, fontSize = 12.sp)
                 // Đổi màu text thành Đỏ (ColorExpense) nếu chênh lệch âm (Chi > Thu)
-                Text(text = formatMoney.format(centerText), color = if (typeFilter == 0 && centerText < 0) ColorExpense else Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(text = formatMoney.format(centerText), color = if (typeFilter == 0 && centerText < 0) ColorExpense else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -472,8 +466,8 @@ fun LegendItem(color: Color, label: String, amount: Double, formatMoney: NumberF
         Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(color))
         Spacer(modifier = Modifier.width(6.dp))
         Column {
-            Text(label, color = Color.LightGray, fontSize = 11.sp)
-            Text(formatMoney.format(amount), color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = Color.Gray, fontSize = 11.sp)
+            Text(formatMoney.format(amount), color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -498,7 +492,7 @@ fun SimpleBarChart(data: List<StatChartPoint>, typeFilter: Int) {
 
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    val gridColor = Color.LightGray
+                    val gridColor = Color.Gray.copy(alpha = 0.3f)
                     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
 
                     drawLine(color = gridColor, start = Offset(0f, 0f), end = Offset(size.width, 0f), pathEffect = dashEffect)
@@ -572,7 +566,7 @@ fun SimpleLineChart(data: List<StatChartPoint>, typeFilter: Int) {
 
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    val gridColor = Color.DarkGray.copy(alpha = 0.5f)
+                    val gridColor = Color.Gray.copy(alpha = 0.3f)
                     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
 
                     drawLine(color = gridColor, start = Offset(0f, 0f), end = Offset(size.width, 0f), pathEffect = dashEffect)
