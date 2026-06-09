@@ -59,7 +59,7 @@ class TransactionViewModel(
         loadTransactions()
         loadUserProfile()
         checkAndGenerateFakeData()
-        calculateAndGetStreak()
+        checkCurrentStreakStatus()
     }
 
     // --- LOGIC TÍNH TOÁN STREAK (LỬA) ---
@@ -124,6 +124,39 @@ class TransactionViewModel(
             .addOnSuccessListener {
                 _streakCount.value = streak
             }
+    }
+
+    // --- HÀM KIỂM TRA STREAK KHI MỞ APP ---
+    private fun checkCurrentStreakStatus() {
+        val currentUser = auth.currentUser ?: return
+        val userRef = db.collection("users").document(currentUser.uid)
+
+        userRef.get().addOnSuccessListener { document ->
+            if (document.exists()) {
+                val lastActiveStr = document.getString("lastRecordDate")
+                var currentStreak = document.getLong("currentStreak")?.toInt() ?: 0
+
+                if (lastActiveStr != null) {
+                    val today = LocalDate.now()
+                    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                    try {
+                        val lastActiveDate = LocalDate.parse(lastActiveStr, formatter)
+                        val daysBetween = ChronoUnit.DAYS.between(lastActiveDate, today)
+
+                        // Nếu đã quá 1 ngày chưa ghi nhận giao dịch -> mất streak
+                        if (daysBetween > 1L) {
+                            currentStreak = 0
+                            // Cập nhật lại Firebase là đã rớt chuỗi (tùy chọn)
+                            updateStreakToFirebase(userRef, lastActiveStr, 0)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("StreakLogic", "Lỗi format ngày tháng: ${e.message}")
+                    }
+                }
+                // Gán giá trị để hiển thị lên UI ngay khi mở app
+                _streakCount.value = currentStreak
+            }
+        }
     }
 
     // --- HÀM BƠM DATA GIẢ ---
