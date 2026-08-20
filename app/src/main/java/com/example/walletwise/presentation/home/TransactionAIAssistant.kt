@@ -13,7 +13,7 @@ class TransactionAIAssistant {
         apiKey = apiKey,
         generationConfig = generationConfig {
             responseMimeType = "application/json"
-            temperature = 0.1f // Giữ sự sáng tạo ở mức cực thấp để AI tập trung làm việc chính xác
+            temperature = 0.1f
         },
         systemInstruction = content {
             text(

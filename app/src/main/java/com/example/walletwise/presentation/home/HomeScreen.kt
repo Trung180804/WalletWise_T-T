@@ -90,6 +90,26 @@ fun HomeScreen(
     val textColor = MaterialTheme.colorScheme.onBackground
     val subTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 
+    var currentStreak by remember { mutableIntStateOf(user?.currentStreak ?: 0) }
+    var lastRecordDate by remember { mutableStateOf(user?.lastRecordDate ?: "") }
+
+    LaunchedEffect(Unit) {
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            db.collection("users").document(uid).addSnapshotListener { snapshot, _ ->
+                if (snapshot != null && snapshot.exists()) {
+                    currentStreak = snapshot.getLong("currentStreak")?.toInt() ?: 0
+                    lastRecordDate = snapshot.getString("lastRecordDate") ?: ""
+                }
+            }
+        }
+    }
+
+    val todayStr = LocalDate.now(ZoneId.systemDefault()).toString()
+    val isUpdatedToday = lastRecordDate == todayStr
+
+
     val topHeaderBrush = Brush.verticalGradient(
         colors = listOf(primaryBlue.copy(alpha = 0.1f), bgColor)
     )
@@ -113,18 +133,19 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.weight(1f))
 
+                            // ... trong TopAppBar, thay thế khối hiển thị Streak bằng đoạn này:
                             if ((user?.currentStreak ?: 0) > 0) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Filled.LocalFireDepartment,
                                         contentDescription = "Streak",
-                                        tint = Color(0xFFFF9800),
+                                        tint = if (isUpdatedToday) Color(0xFFFF9800) else Color.Gray,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "${user?.currentStreak}",
-                                        color = Color(0xFFFF9800),
+                                        color = if (isUpdatedToday) Color(0xFFFF9800) else Color.Gray,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
