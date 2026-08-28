@@ -5,7 +5,6 @@ import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
@@ -71,9 +70,9 @@ fun HomeScreen(
     onLogout: () -> Unit
 ) {
     val transactions by viewModel.transactions.collectAsState()
-    val formatMoney = NumberFormat.getCurrencyInstance(Locale("vi", "VN"))
+    val formatMoney = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("vi-VN"))
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     var isSubScreenOpen by remember { mutableStateOf(false) }
 
     val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
@@ -381,7 +380,7 @@ fun HomeScreen(
                     }
                 }
                 3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
-                4 -> ProfileScreen(user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
+                4 -> ProfileScreen(viewModel = viewModel, user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
             }
         }
 
@@ -527,9 +526,9 @@ fun TransactionGridItem(
     val amountColor = if (isIncome) Color(0xFF4CAF50) else textColor
     val imgBgColor = MaterialTheme.colorScheme.surfaceVariant
 
-    val sdfTime = java.text.SimpleDateFormat("HH:mm", Locale("vi", "VN"))
+    val sdfTime = java.text.SimpleDateFormat("HH:mm", Locale.forLanguageTag("vi-VN"))
     val timeString = sdfTime.format(java.util.Date(transaction.timestamp))
-    val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale("vi", "VN"))
+    val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale.forLanguageTag("vi-VN"))
     val fullDateString = sdfFullDate.format(java.util.Date(transaction.timestamp))
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -538,7 +537,7 @@ fun TransactionGridItem(
     Card(modifier = Modifier.fillMaxWidth().clickable { showDetailsDialog = true }, colors = CardDefaults.cardColors(containerColor = cardColor), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Box(modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(imgBgColor), contentAlignment = Alignment.Center) {
-                if (!transaction.imageUrl.isNullOrEmpty()) {
+                if (transaction.imageUrl.isNotEmpty()) {
                     AsyncImage(model = transaction.imageUrl, contentDescription = "Ảnh", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 } else { Text(text = "Không có ảnh", fontSize = 10.sp, color = subTextColor) }
             }
@@ -579,7 +578,7 @@ fun TransactionGridItem(
                         IconButton(onClick = { showDetailsDialog = false }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Clear, contentDescription = "Đóng", tint = subTextColor) }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
-                    if (!transaction.imageUrl.isNullOrEmpty()) {
+                    if (transaction.imageUrl.isNotEmpty()) {
                         AsyncImage(model = transaction.imageUrl, contentDescription = "Hóa đơn", modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
                         Spacer(modifier = Modifier.height(20.dp))
                     }

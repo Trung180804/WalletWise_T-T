@@ -46,6 +46,10 @@ class TransactionViewModel(
     private val _streakCount = MutableStateFlow(0)
     val streakCount: StateFlow<Int> = _streakCount.asStateFlow()
 
+    // Biến lưu trữ danh sách danh mục
+    private val _categories = MutableStateFlow<List<CategoryItem>>(expenseCategories + incomeCategories)
+    val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
+
     // Biến lưu trữ giao dịch đang được chọn để Sửa
     var transactionToEdit by mutableStateOf<Transaction?>(null)
 
@@ -60,6 +64,7 @@ class TransactionViewModel(
         loadUserProfile()
         checkAndGenerateFakeData()
         checkCurrentStreakStatus()
+        fetchCategories()
     }
 
     // --- LOGIC TÍNH TOÁN STREAK (LỬA) ---
@@ -352,5 +357,55 @@ class TransactionViewModel(
                     _userProfile.value = user
                 }
             }
+    }
+
+    private fun fetchCategories() {
+        val uid = auth.currentUser?.uid ?: return
+
+        // addSnapshotListener giúp dữ liệu tự động cập nhật realtime khi có thay đổi
+        db.collection("users").document(uid).collection("categories")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Xử lý lỗi nếu cần
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { it.toObject(CategoryItem::class.java) }
+                    if (list.isEmpty()) {
+                        // Nếu user mới tinh chưa có danh mục, đẩy danh sách mặc định lên Firebase
+                        seedDefaultCategories(uid)
+                    } else {
+                        _categories.value = list
+                    }
+                }
+            }
+    }
+
+    // TẠO DỮ LIỆU MẶC ĐỊNH LẦN ĐẦU (CREATE DEFAULTS)
+    private fun seedDefaultCategories(uid: String) {
+        // Giả sử bạn đã import expenseCategories và incomeCategories từ AddTransactionScreen
+        val defaults = expenseCategories + incomeCategories
+        defaults.forEach { cat ->
+            db.collection("users").document(uid).collection("categories").document(cat.id).set(cat)
+        }
+    }
+
+    // THÊM DANH MỤC MỚI (CREATE)
+    fun addCategory(category: CategoryItem) {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid).collection("categories").document(category.id).set(category)
+    }
+
+    // CẬP NHẬT DANH MỤC (UPDATE)
+    fun updateCategory(category: CategoryItem) {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid).collection("categories").document(category.id).set(category)
+    }
+
+    // XÓA DANH MỤC (DELETE)
+    fun deleteCategory(categoryId: String) {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid).collection("categories").document(categoryId).delete()
     }
 }

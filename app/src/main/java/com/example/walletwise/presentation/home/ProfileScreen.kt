@@ -10,16 +10,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -32,7 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -48,11 +56,12 @@ enum class ProfileRoute {
     MAIN, EDIT_PROFILE, SETTINGS,
     FONT_SIZE, CURRENCY, DEFAULT_CURRENCY, THEME,
     RECURRING, ADD_RECURRING,
-    ABOUT_US, REMINDERS
+    ABOUT_US, REMINDERS, CUSTOMER_CARE, CATEGORY_MANAGEMENT
 }
 
 @Composable
 fun ProfileScreen(
+    viewModel: TransactionViewModel,
     user: com.example.walletwise.domain.model.User?,
     onLogout: () -> Unit,
     onSubScreenChange: (Boolean) -> Unit
@@ -85,7 +94,8 @@ fun ProfileScreen(
             ProfileRoute.ABOUT_US -> AboutUsView { currentRoute = ProfileRoute.MAIN }
             ProfileRoute.REMINDERS -> RemindersView { currentRoute = ProfileRoute.SETTINGS }
             ProfileRoute.DEFAULT_CURRENCY -> DefaultCurrencyView { currentRoute = ProfileRoute.SETTINGS }
-        }
+            ProfileRoute.CUSTOMER_CARE -> CustomerCareView { currentRoute = ProfileRoute.MAIN }
+            ProfileRoute.CATEGORY_MANAGEMENT -> CategoryManagementView(viewModel) { currentRoute = ProfileRoute.SETTINGS }        }
     }
 }
 
@@ -138,6 +148,7 @@ fun MainProfileView(
         // Menu items
         MenuRowItem(Icons.Default.Person,  "Hồ sơ")                    { onNavigate(ProfileRoute.EDIT_PROFILE) }
         MenuRowItem(Icons.Default.Refresh, "Quy đổi tiền tệ")   { onNavigate(ProfileRoute.CURRENCY) }
+        MenuRowItem(Icons.Default.SupportAgent, "Chăm sóc khách hàng") { onNavigate(ProfileRoute.CUSTOMER_CARE) }
         MenuRowItem(Icons.Default.Settings,"Cài đặt")                  { onNavigate(ProfileRoute.SETTINGS) }
         MenuRowItem(Icons.Default.Share,   "Giới thiệu cho bạn bè")   { /* share intent */ }
         MenuRowItem(Icons.Default.Info,    "Về chúng tôi")             { onNavigate(ProfileRoute.ABOUT_US) }
@@ -250,7 +261,7 @@ fun CurrencyConverterView(onBack: () -> Unit) {
     var activeIndex  by remember { mutableIntStateOf(0) }
     var rawInput     by remember { mutableStateOf("1000") }
     var pendingOp    by remember { mutableStateOf("") }
-    var pendingVal   by remember { mutableStateOf(0.0) }
+    var pendingVal   by remember { mutableDoubleStateOf(0.0) }
     var justComputed by remember { mutableStateOf(false) }
 
     var showDropdownFor by remember { mutableStateOf<Int?>(null) }
@@ -585,7 +596,7 @@ fun SettingsMainView(onNavigate: (ProfileRoute) -> Unit, onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(8.dp))
             SettingsRowItem(Icons.Default.Edit,          "Cỡ chữ")             { onNavigate(ProfileRoute.FONT_SIZE) }
-            SettingsRowItem(Icons.AutoMirrored.Filled.List, "Cài đặt danh mục")  { /* TODO */ }
+            SettingsRowItem(Icons.AutoMirrored.Filled.List, "Cài đặt danh mục") { onNavigate(ProfileRoute.CATEGORY_MANAGEMENT) }
             SettingsRowItem(Icons.Default.ShoppingCart, "Tiền tệ mặc định") { onNavigate(ProfileRoute.DEFAULT_CURRENCY) }
             SettingsRowItem(Icons.Default.Notifications, "Lời nhắc nhở")       { onNavigate(ProfileRoute.REMINDERS) }
             SettingsRowItem(Icons.Default.Refresh,       "Giao dịch định kỳ") { onNavigate(ProfileRoute.RECURRING) }
@@ -844,8 +855,7 @@ fun EditProfileView(user: com.example.walletwise.domain.model.User?, onBack: () 
 
     val myId = user?.id?.takeIf { it.isNotBlank() } ?: "Chưa có ID"
     val realEmail = user?.email?.takeIf { it.isNotBlank() } ?: "Chưa có Email"
-    val firstLetter = user?.username?.filter { it.isLetter() }?.firstOrNull()?.toString()?.uppercase() ?: "U"
-
+    val firstLetter = user?.username?.firstOrNull { it.isLetter() }?.toString()?.uppercase() ?: "U"
     var showNameDialog by remember { mutableStateOf(false) }
     var showGenderDialog by remember { mutableStateOf(false) }
     var showPasswordDialog by remember { mutableStateOf(false) }
@@ -1204,6 +1214,350 @@ fun FormStaticBlock(title: String, value: String, isDropdown: Boolean = false) {
         ) {
             Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
             if (isDropdown) Icon(Icons.Default.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun CustomerCareView(onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        TopHeader("Chăm sóc khách hàng", onBack)
+        Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+            Spacer(Modifier.height(16.dp))
+            Text("Chúng tôi có thể giúp gì cho bạn?", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(24.dp))
+
+            // Các nút liên hệ UI
+            SettingsRowItem(Icons.Default.Call, "Gọi Hotline (Miễn phí)") { /* TODO */ }
+            SettingsRowItem(Icons.Default.Email, "Gửi Email hỗ trợ") { /* TODO */ }
+            SettingsRowItem(Icons.Default.QuestionAnswer, "Câu hỏi thường gặp (FAQ)") { /* TODO */ }
+
+            Spacer(Modifier.height(32.dp))
+            FormInputBlock("Gửi phản hồi trực tiếp", "", {}, "Nhập vấn đề bạn đang gặp phải...")
+            Button(
+                onClick = { /* TODO */ },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("Gửi yêu cầu", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+enum class TransactionType(val title: String) {
+    EXPENSE("Chi tiêu"),
+    INCOME("Thu nhập")
+}
+
+data class CategoryModel(
+    val id: String,
+    val name: String,
+    val type: TransactionType,
+    val icon: ImageVector,
+    val isCustom: Boolean = false
+)
+
+@Composable
+fun CategoryManagementView(viewModel: TransactionViewModel, onBack: () -> Unit) {
+    val categories by viewModel.categories.collectAsState()
+    var selectedTab by remember { mutableStateOf("Chi") }
+    var showAddScreen by remember { mutableStateOf(false) }
+
+    var editingCategory by remember { mutableStateOf<CategoryItem?>(null) }
+    var categoryInput by remember { mutableStateOf("") }
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    if (showAddScreen) {
+        AddCategoryScreen(
+            onBack = { showAddScreen = false },
+            onSave = { newCategory ->
+                viewModel.addCategory(newCategory)
+                showAddScreen = false
+            }
+        )
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Quay lại", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(26.dp).clickable { onBack() })
+            Text("Cài đặt danh mục", color = MaterialTheme.colorScheme.onBackground, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Icon(Icons.Default.Tune, "Sắp xếp", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(26.dp))
+        }
+
+        // Tabs Chi/Thu
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+        ) {
+            listOf("Chi" to "Chi tiêu", "Thu" to "Thu nhập").forEach { (type, label) ->
+                val isSelected = selectedTab == type
+                Box(
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent)
+                        .clickable { selectedTab = type }.padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Gray, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, fontSize = 15.sp)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        val displayList = categories.filter { it.type == selectedTab }
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(displayList) { cat ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 👉 Hiển thị Emoji
+                    Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFFF9C4)), contentAlignment = Alignment.Center) {
+                        Text(cat.icon, fontSize = 20.sp)
+                    }
+                    Spacer(Modifier.width(16.dp))
+
+                    Text(cat.name, color = MaterialTheme.colorScheme.onBackground, fontSize = 16.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (cat.isCustom) {
+                        Text("(Tùy chỉnh)", color = Color.Gray, fontSize = 13.sp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+
+                    // 👉 Thao tác Xóa / Sửa
+                    Icon(Icons.Default.Delete, "Xóa", tint = Color.Gray, modifier = Modifier.size(22.dp).clickable { viewModel.deleteCategory(cat.id) })
+                    Spacer(Modifier.width(16.dp))
+                    Icon(Icons.Default.Edit, "Sửa", tint = Color.Gray, modifier = Modifier.size(20.dp).clickable { editingCategory = cat; categoryInput = cat.name; showEditDialog = true })
+                    Spacer(Modifier.width(16.dp))
+                    Icon(Icons.Default.Menu, "Kéo thả", tint = Color.Gray, modifier = Modifier.size(22.dp))
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            }
+        }
+
+        Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Button(
+                onClick = { showAddScreen = true },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD54F)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Add, null, tint = Color.Black)
+                Spacer(Modifier.width(8.dp))
+                Text("Thêm danh mục", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+    }
+
+    if (showEditDialog && editingCategory != null) {
+        Dialog(onDismissRequest = { showEditDialog = false }) {
+            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text("Sửa tên danh mục", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(value = categoryInput, onValueChange = { categoryInput = it }, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(24.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showEditDialog = false }) { Text("Hủy", color = Color.Gray, fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.width(12.dp))
+                        Button(
+                            onClick = {
+                                if (categoryInput.isNotBlank()) {
+                                    // Gọi hàm Cập nhật lên Firebase
+                                    val updatedCat = editingCategory!!.copy(name = categoryInput)
+                                    viewModel.updateCategory(updatedCat)
+                                }
+                                showEditDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD54F))
+                        ) { Text("Lưu", color = Color.Black, fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AddCategoryScreen(onBack: () -> Unit, onSave: (CategoryItem) -> Unit) {
+    var categoryName by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf("Chi") }
+    var selectedIcon by remember { mutableStateOf("🎮") }
+    val focusManager = LocalFocusManager.current
+
+    // Data các Emoji
+    val iconGroups = mapOf(
+        "Giải trí" to listOf("🎮", "🎰", "🎬", "🎵", "🎾", "🎤"),
+        "Đồ ăn" to listOf("🍔", "🍟", "🍕", "☕", "🍰", "🍷"),
+        "Di chuyển" to listOf("🚗", "🛵", "✈️", "🚌", "⛽"),
+        "Khác" to listOf("🛒", "🏠", "🐶", "🎁", "🎓", "💸")
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
+    ) {
+        // Top Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Hủy",
+                color = Color.Gray,
+                fontSize = 16.sp,
+                modifier = Modifier.clickable { onBack() }
+            )
+            Text(
+                text = "Thêm danh mục",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Lưu",
+                tint = if (categoryName.isNotBlank()) MaterialTheme.colorScheme.primary else Color.Gray,
+                modifier = Modifier.clickable(
+                    enabled = categoryName.isNotBlank()
+                ) {
+                    onSave(
+                        CategoryItem(
+                            name = categoryName,
+                            type = selectedType,
+                            icon = selectedIcon,
+                            isCustom = true
+                        )
+                    )
+                }
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Lựa chọn Loại Giao Dịch
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectableGroup(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("Chi" to "Chi tiêu", "Thu" to "Thu nhập").forEach { (type, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { selectedType = type }
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        RadioButton(
+                            selected = (selectedType == type),
+                            onClick = { selectedType = type },
+                            colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFFD54F))
+                        )
+                        Text(
+                            text = label,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Khu vực Nhập Tên Danh Mục
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFD54F)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = selectedIcon, fontSize = 24.sp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                androidx.compose.foundation.text.BasicTextField(
+                    value = categoryName,
+                    onValueChange = { categoryName = it },
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 16.sp
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(16.dp),
+                    decorationBox = { innerTextField ->
+                        if (categoryName.isEmpty()) {
+                            Text(
+                                text = "Vui lòng nhập tên danh mục",
+                                color = Color.Gray,
+                                fontSize = 15.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Lưới Chọn Icon
+            iconGroups.forEach { (groupName, icons) ->
+                Text(
+                    text = groupName,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    textAlign = TextAlign.Center
+                )
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly, // Tối ưu căn giữa cho 4 cột
+                    maxItemsInEachRow = 4
+                ) {
+                    icons.forEach { icon ->
+                        val isIconSelected = selectedIcon == icon
+                        Box(
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(50.dp) // Tăng size một chút để dễ bấm hơn
+                                .clip(CircleShape)
+                                .background(if (isIconSelected) Color(0xFFFFD54F) else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable {
+                                    selectedIcon = icon
+                                    focusManager.clearFocus()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = icon, fontSize = 24.sp)
+                        }
+                    }
+                }
+            }
         }
     }
 }
