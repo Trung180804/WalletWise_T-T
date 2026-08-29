@@ -65,6 +65,15 @@ class TransactionViewModel(
         checkAndGenerateFakeData()
         checkCurrentStreakStatus()
         fetchCategories()
+
+        auth.addAuthStateListener { firebaseAuth ->
+            if (firebaseAuth.currentUser != null) {
+                loadTransactions()
+                loadUserProfile()
+                checkCurrentStreakStatus()
+                fetchCategories()
+            }
+        }
     }
 
     // --- LOGIC TÍNH TOÁN STREAK (LỬA) ---
@@ -170,8 +179,7 @@ class TransactionViewModel(
         val targetEmail = "sniper021003@gmail.com"
         if (currentUser == null || currentUser.email != targetEmail) return
 
-        db.collection("TRANSACTIONS")
-            .whereEqualTo("userId", currentUser.uid)
+        db.collection("users").document(currentUser.uid).collection("transactions")
             .limit(1)
             .get()
             .addOnSuccessListener { snapshot ->
@@ -217,7 +225,7 @@ class TransactionViewModel(
                 "imageUrl" to sampleImages.random()
             )
 
-            db.collection("TRANSACTIONS").document(txId).set(fakeTx)
+            db.collection("users").document(uid).collection("transactions").document(txId).set(fakeTx)
         }
         loadTransactions()
     }
@@ -312,9 +320,13 @@ class TransactionViewModel(
                 .onSuccess {
                     calculateAndGetStreak() // Tự động cập nhật lửa
                     loadTransactions()
+                    android.widget.Toast.makeText(context, "Thêm giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
                     onSuccess()
                 }
-                .onFailure { Log.e("ADD_TRANSACTION", "ERROR", it) }
+                .onFailure {
+                    Log.e("ADD_TRANSACTION", "ERROR", it)
+                    android.widget.Toast.makeText(context, "Lỗi thêm giao dịch: ${it.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+                }
             _isLoading.value = false
         }
     }
@@ -341,9 +353,13 @@ class TransactionViewModel(
                 .onSuccess {
                     calculateAndGetStreak() // Cập nhật lửa
                     loadTransactions()
+                    android.widget.Toast.makeText(context, "Cập nhật giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
                     onSuccess()
                 }
-                .onFailure { Log.e("ADD_TRANSACTION", "ERROR", it) }
+                .onFailure {
+                    Log.e("UPDATE_TRANSACTION", "ERROR", it)
+                    android.widget.Toast.makeText(context, "Lỗi cập nhật: ${it.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+                }
             _isLoading.value = false
         }
     }

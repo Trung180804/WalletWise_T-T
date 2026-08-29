@@ -23,7 +23,9 @@ class AuthRepositoryImpl : AuthRepository {
             val userMap = mapOf(
                 "id" to uid,
                 "email" to email,
-                "username" to username
+                "username" to username,
+                "currentStreak" to 0,
+                "lastRecordDate" to ""
             )
             FirebaseFirestore.getInstance().collection("users").document(uid).set(userMap).await()
             Result.success(result.user != null)

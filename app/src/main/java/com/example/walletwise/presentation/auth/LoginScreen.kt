@@ -37,7 +37,10 @@ fun LoginScreen(
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(state.isSuccess) {
-        if (state.isSuccess) onLoginSuccess()
+        if (state.isSuccess) {
+            onLoginSuccess()
+            viewModel.resetState()
+        }
     }
 
     AuthBackground {

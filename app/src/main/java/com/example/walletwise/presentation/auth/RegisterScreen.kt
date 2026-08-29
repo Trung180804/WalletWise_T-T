@@ -29,7 +29,10 @@ fun RegisterScreen(
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(state.isSuccess) {
-        if (state.isSuccess) onRegisterSuccess()
+        if (state.isSuccess) {
+            onRegisterSuccess()
+            viewModel.resetState()
+        }
     }
 
     AuthBackground {

@@ -126,8 +126,30 @@ class AuthViewModel(
         _state.value = _state.value.copy(error = null)
     }
 
+    fun resetState() {
+        _state.value = AuthState()
+    }
+
     fun loadUserProfile() {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+        if (firebaseUser == null) {
+            _currentUser.value = null
+            return
+        }
+        val uid = firebaseUser.uid
+
+        // Set immediate fallback user so UI isn't null while Firestore loads
+        if (_currentUser.value == null) {
+            val email = firebaseUser.email ?: ""
+            val username = firebaseUser.displayName?.takeIf { it.isNotBlank() }
+                ?: email.substringBefore("@").takeIf { it.isNotBlank() }
+                ?: "Thành viên"
+            _currentUser.value = com.example.walletwise.domain.model.User(
+                id = uid,
+                email = email,
+                username = username
+            )
+        }
 
         FirebaseFirestore.getInstance()
             .collection("users")
@@ -137,8 +159,43 @@ class AuthViewModel(
                 if (error != null) return@addSnapshotListener
 
                 if (snapshot != null && snapshot.exists()) {
-                    _currentUser.value =
-                        snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
+                    val userObj = snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
+                    if (userObj != null) {
+                        _currentUser.value = userObj
+                    } else {
+                        val email = snapshot.getString("email") ?: firebaseUser.email ?: ""
+                        val username = snapshot.getString("username")
+                            ?: firebaseUser.displayName
+                            ?: email.substringBefore("@")
+                        val streak = snapshot.getLong("currentStreak")?.toInt() ?: 0
+                        val lastDate = snapshot.getString("lastRecordDate") ?: ""
+                        _currentUser.value = com.example.walletwise.domain.model.User(
+                            id = uid,
+                            email = email,
+                            username = username,
+                            currentStreak = streak,
+                            lastRecordDate = lastDate
+                        )
+                    }
+                } else {
+                    // Document does not exist in Firestore -> Create default document for user
+                    val email = firebaseUser.email ?: ""
+                    val username = firebaseUser.displayName?.takeIf { it.isNotBlank() }
+                        ?: email.substringBefore("@").takeIf { it.isNotBlank() }
+                        ?: "Thành viên"
+                    val defaultUserMap = mapOf(
+                        "id" to uid,
+                        "email" to email,
+                        "username" to username,
+                        "currentStreak" to 0,
+                        "lastRecordDate" to ""
+                    )
+                    FirebaseFirestore.getInstance().collection("users").document(uid).set(defaultUserMap)
+                    _currentUser.value = com.example.walletwise.domain.model.User(
+                        id = uid,
+                        email = email,
+                        username = username
+                    )
                 }
             }
     }
@@ -185,6 +242,8 @@ class AuthViewModel(
 
                 if (!loggedIn) {
                     _currentUser.value = null
+                } else {
+                    loadUserProfile()
                 }
             }
     }

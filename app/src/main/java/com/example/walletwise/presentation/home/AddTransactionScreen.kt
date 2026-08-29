@@ -270,6 +270,10 @@ fun AddTransactionScreen(
                         android.widget.Toast.makeText(context, "Số tiền không hợp lệ", android.widget.Toast.LENGTH_SHORT).show()
                         return@Button
                     }
+                    if (category.isBlank()) {
+                        android.widget.Toast.makeText(context, "Vui lòng chọn danh mục", android.widget.Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
                     if (isEditMode) {
                         viewModel.updateTransaction(txToEdit!!.copy(amount = amountValue, type = type, category = category, note = note, paymentMethod = selectedWallet), capturedImageUri, context) { handleBack() }
                     } else {

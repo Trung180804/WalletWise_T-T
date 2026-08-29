@@ -93,6 +93,7 @@ fun HomeScreen(
     var lastRecordDate by remember { mutableStateOf(user?.lastRecordDate ?: "") }
 
     LaunchedEffect(Unit) {
+        viewModel.loadTransactions()
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
         if (uid != null) {
             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -197,11 +198,14 @@ fun HomeScreen(
                             .offset(y = (-18).dp)
                             .size(64.dp)
                             .clip(CircleShape)
-                            .background(if (selectedTab == 2) Color(0xFFFFD700) else cardColor)
-                            .clickable { selectedTab = 2 },
+                            .background(cardColor)
+                            .clickable {
+                                selectedTab = 0
+                                onNavigateToAdd()
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = if (selectedTab == 2) Color.White else primaryBlue, modifier = Modifier.size(36.dp))
+                        Icon(Icons.Default.Add, contentDescription = null, tint = primaryBlue, modifier = Modifier.size(36.dp))
                     }
                     BottomBarItem(icon = Icons.Default.Settings, isSelected = selectedTab == 3) { selectedTab = 3 }
                     BottomBarItem(icon = Icons.Default.Person, isSelected = selectedTab == 4) { selectedTab = 4 }
@@ -374,11 +378,7 @@ fun HomeScreen(
                 }
 
                 1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date -> selectedDateFilter = date; selectedTab = 0 })
-                2 -> {
-                    LaunchedEffect(Unit) {
-                        onNavigateToAdd()
-                    }
-                }
+                2 -> { /* Thao tác bấm nút '+' đã chuyển thẳng tới onNavigateToAdd() và quay lại Tab 0 */ }
                 3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
                 4 -> ProfileScreen(viewModel = viewModel, user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
             }

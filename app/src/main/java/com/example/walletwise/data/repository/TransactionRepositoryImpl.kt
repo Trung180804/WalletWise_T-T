@@ -25,7 +25,8 @@ class TransactionRepositoryImpl : TransactionRepository {
     override suspend fun addTransaction(transaction: Transaction, localImageUri: Uri?, context: Context): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
-            val docRef = db.collection("TRANSACTIONS").document()
+            val userTxCollection = db.collection("users").document(userId).collection("transactions")
+            val docRef = userTxCollection.document()
 
             var onlineImageUrl = ""
 
@@ -90,11 +91,23 @@ class TransactionRepositoryImpl : TransactionRepository {
     override suspend fun getTransactions(): Result<List<Transaction>> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
-            val snapshot = db.collection("TRANSACTIONS")
-                .whereEqualTo("userId", userId)
-                .get()
-                .await()
-            val transactions = snapshot.toObjects(Transaction::class.java)
+            val userTxCollection = db.collection("users").document(userId).collection("transactions")
+            val snapshot = userTxCollection.get().await()
+            var transactions = snapshot.toObjects(Transaction::class.java)
+
+            if (transactions.isEmpty()) {
+                try {
+                    val rootSnapshot = db.collection("TRANSACTIONS")
+                        .whereEqualTo("userId", userId)
+                        .get()
+                        .await()
+                    val rootTransactions = rootSnapshot.toObjects(Transaction::class.java)
+                    if (rootTransactions.isNotEmpty()) {
+                        transactions = rootTransactions
+                    }
+                } catch (_: Exception) {}
+            }
+
             Result.success(transactions)
         } catch (e: Exception) {
             Result.failure(e)
@@ -103,7 +116,11 @@ class TransactionRepositoryImpl : TransactionRepository {
 
     override suspend fun deleteTransaction(transactionId: String): Result<Boolean> {
         return try {
-            db.collection("TRANSACTIONS").document(transactionId).delete().await()
+            val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
+            db.collection("users").document(userId).collection("transactions").document(transactionId).delete().await()
+            try {
+                db.collection("TRANSACTIONS").document(transactionId).delete().await()
+            } catch (_: Exception) {}
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
@@ -116,6 +133,7 @@ class TransactionRepositoryImpl : TransactionRepository {
         context: Context
     ): Result<Boolean> {
         return try {
+            val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
 
             var imageUrl = transaction.imageUrl
 
@@ -127,19 +145,20 @@ class TransactionRepositoryImpl : TransactionRepository {
                 imageUrl = imageUrl
             )
 
-            db.collection("TRANSACTIONS")
+            db.collection("users")
+                .document(userId)
+                .collection("transactions")
                 .document(transaction.id)
                 .set(updatedTransaction)
                 .await()
 
-            if (localImageUri != null) {
-                imageUrl = uploadImageToImgBB(localImageUri, context)
+            try {
+                db.collection("TRANSACTIONS")
+                    .document(transaction.id)
+                    .set(updatedTransaction)
+                    .await()
+            } catch (_: Exception) {}
 
-                android.util.Log.d(
-                    "UPDATE_TX",
-                    "UPLOADED_URLl = $imageUrl"
-                )
-            }
             Result.success(true)
 
         } catch (e: Exception) {
