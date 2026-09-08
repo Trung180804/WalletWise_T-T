@@ -17,9 +17,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
-import com.example.walletwise.presentation.auth.components.AuthBackground
-import com.example.walletwise.presentation.auth.components.AuthHeader
-import com.example.walletwise.presentation.auth.components.AuthTextField
+import com.example.walletwise.presentation.auth.components.*
 
 @Composable
 fun LoginScreen(
@@ -35,6 +33,13 @@ fun LoginScreen(
     var passwordVisible by remember { mutableStateOf(false) }
 
     val state by viewModel.state.collectAsState()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            onLoginSuccess()
+        }
+    }
 
     LaunchedEffect(state.isSuccess) {
         if (state.isSuccess) {

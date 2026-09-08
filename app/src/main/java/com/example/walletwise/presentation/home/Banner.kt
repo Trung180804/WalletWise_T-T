@@ -11,8 +11,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,13 +25,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.walletwise.domain.model.RecurringTransaction
+import com.example.walletwise.domain.model.Reminder
 import com.example.walletwise.domain.model.User
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
+import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.ZoneId
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material3.Icon
 
 // Gradient màu tối sang trọng cho Banner
 private val BannerGradient = Brush.horizontalGradient(
@@ -41,22 +44,49 @@ private val BannerGradient = Brush.horizontalGradient(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HomeBannerCarousel(user: User?) {
-    val pages = 3
+fun HomeBannerCarousel(
+    user: User?,
+    reminders: List<Reminder> = emptyList(),
+    recurringTransactions: List<RecurringTransaction> = emptyList()
+) {
+    val activeReminders = reminders.filter { it.isEnabled }
+    val activeRecurring = recurringTransactions.filter { it.isEnabled }
 
-    val pagerState = rememberPagerState(pageCount = { pages })
+    // Danh sách các trang Banner theo thứ tự yêu cầu
+    val bannerPages = mutableListOf<@Composable () -> Unit>()
+
+    // 1. Lời chào (Vị trí 1 - index 0)
+    bannerPages.add { GreetingPage(user = user) }
+
+    // 2. Tất cả Lời nhắc nhở đang bật (Vị trí thứ 2)
+    activeReminders.forEach { reminder ->
+        bannerPages.add { ReminderBannerPage(reminder = reminder) }
+    }
+
+    // 3. Tất cả Giao dịch định kỳ đang bật (Vị trí thứ 3)
+    activeRecurring.forEach { recurring ->
+        bannerPages.add { RecurringBannerPage(recurring = recurring) }
+    }
+
+    // 4. Streak Dashboard
+    bannerPages.add { StreakDashboardBanner(user = user) }
+
+    // 5. Mẹo tài chính
+    bannerPages.add { TipPage() }
+
+    val pagesCount = bannerPages.size
+    val pagerState = rememberPagerState(pageCount = { pagesCount })
 
     // Auto slide mỗi 5 giây
-    LaunchedEffect(pagerState) {
+    LaunchedEffect(pagerState, pagesCount) {
         while (true) {
             delay(5000)
-
-            if (pagerState.currentPage == pages - 1) {
-                pagerState.scrollToPage(0)
-            } else {
-                pagerState.animateScrollToPage(
-                    pagerState.currentPage + 1
-                )
+            if (pagesCount > 0) {
+                if (pagerState.currentPage >= pagesCount - 1) {
+                    pagerState.scrollToPage(0)
+                } else {
+                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                }
             }
         }
     }
@@ -68,12 +98,9 @@ fun HomeBannerCarousel(user: User?) {
                 .fillMaxWidth()
                 .height(120.dp)
         ) { page ->
-
             AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically()) {
-                when (page) {
-                    0 -> GreetingPage(user = user)
-                    1 -> StreakDashboardBanner(user = user)
-                    2 -> TipPage()
+                if (page in bannerPages.indices) {
+                    bannerPages[page]()
                 }
             }
         }
@@ -85,7 +112,7 @@ fun HomeBannerCarousel(user: User?) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center
         ) {
-            repeat(pages) { index ->
+            repeat(pagesCount) { index ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 4.dp)
@@ -146,8 +173,101 @@ fun GreetingPage(user: User?) {
 }
 
 @Composable
+fun ReminderBannerPage(reminder: Reminder) {
+    Card(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color(0xFF2196F3), Color(0xFF00BCD4))
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "🔔 Lời nhắc: ${reminder.title}",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = if (reminder.note.isNotBlank()) reminder.note else "Nhắc nhở: ${reminder.frequency} lúc ${reminder.time}",
+                        fontSize = 13.sp,
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 2
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecurringBannerPage(recurring: RecurringTransaction) {
+    val df = remember { DecimalFormat("#,##0") }
+    val isIncome = recurring.type == "Thu"
+    val sign = if (isIncome) "+" else "-"
+
+    Card(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color(0xFF9C27B0), Color(0xFFE91E63))
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "🔄 Giao dịch định kỳ: ${recurring.title}",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "$sign${df.format(recurring.amount)} đ • ${recurring.frequency} (${recurring.category})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFD54F)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun StreakDashboardBanner(user: User?) {
-    // 👉 Đã sửa cảnh báo vàng (Dùng mutableIntStateOf thay vì mutableStateOf)
     var currentStreak by remember { mutableIntStateOf(user?.currentStreak ?: 0) }
     var lastRecordDate by remember { mutableStateOf(user?.lastRecordDate ?: "") }
 
@@ -227,7 +347,6 @@ fun StreakDashboardBanner(user: User?) {
                     Icon(
                         imageVector = Icons.Filled.LocalFireDepartment,
                         contentDescription = "Streak Status",
-                        // Nếu đã hoàn thành (isUpdatedToday) thì màu cam, chưa thì màu xám
                         tint = if (isUpdatedToday) Color(0xFFFF9800) else Color.Gray,
                         modifier = Modifier.size(32.dp)
                     )

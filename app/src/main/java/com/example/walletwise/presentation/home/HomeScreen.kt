@@ -1,7 +1,10 @@
 package com.example.walletwise.presentation.home
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,10 +51,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.example.walletwise.R
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.User
+import com.example.walletwise.presentation.profile.ProfileScreen
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -70,6 +75,8 @@ fun HomeScreen(
     onLogout: () -> Unit
 ) {
     val transactions by viewModel.transactions.collectAsState()
+    val reminders by viewModel.reminders.collectAsState()
+    val recurringTransactions by viewModel.recurringTransactions.collectAsState()
     val formatMoney = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("vi-VN"))
 
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -92,12 +99,28 @@ fun HomeScreen(
     var currentStreak by remember { mutableIntStateOf(user?.currentStreak ?: 0) }
     var lastRecordDate by remember { mutableStateOf(user?.lastRecordDate ?: "") }
 
+    val context = LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = {}
+    )
+
     LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         viewModel.loadTransactions()
+        viewModel.initializeScheduledAutomation(context)
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
         if (uid != null) {
             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            db.collection("users").document(uid).addSnapshotListener { snapshot, _ ->
+            db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
                 if (snapshot != null && snapshot.exists()) {
                     currentStreak = snapshot.getLong("currentStreak")?.toInt() ?: 0
                     lastRecordDate = snapshot.getString("lastRecordDate") ?: ""
@@ -269,7 +292,11 @@ fun HomeScreen(
                     Column(modifier = Modifier.fillMaxSize().background(topHeaderBrush)) {
                         Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
 
-                            HomeBannerCarousel(user = user)
+                            HomeBannerCarousel(
+                                user = user,
+                                reminders = reminders,
+                                recurringTransactions = recurringTransactions
+                            )
 
                             Spacer(modifier = Modifier.height(12.dp))
 

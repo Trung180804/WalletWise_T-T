@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
+import com.google.firebase.firestore.PropertyName
 import java.io.File
 import java.util.UUID
 
@@ -47,21 +48,31 @@ data class CategoryItem(
     val name: String = "",
     val icon: String = "",
     val type: String = "Chi",
-    val isCustom: Boolean = false
+    @get:PropertyName("isCustom") @field:PropertyName("isCustom")
+    val isCustom: Boolean = false,
+    val sortOrder: Int = 0
 )
 
 val expenseCategories = listOf(
-    CategoryItem(name = "Ăn uống", icon = "🍔"), CategoryItem(name = "Mua sắm", icon = "🛒"),
-    CategoryItem(name = "Nhà cửa", icon = "🏠"), CategoryItem(name = "Di chuyển", icon = "🚗"),
-    CategoryItem(name = "Y tế", icon = "💊"), CategoryItem(name = "Giải trí", icon = "🎮"),
-    CategoryItem(name = "Hóa đơn", icon = "💳"), CategoryItem(name = "Học tập", icon = "📚")
+    CategoryItem(name = "Ăn uống", icon = "🍔", sortOrder = 1),
+    CategoryItem(name = "Mua sắm", icon = "🛒", sortOrder = 2),
+    CategoryItem(name = "Nhà cửa", icon = "🏠", sortOrder = 3),
+    CategoryItem(name = "Di chuyển", icon = "🚗", sortOrder = 4),
+    CategoryItem(name = "Y tế", icon = "💊", sortOrder = 5),
+    CategoryItem(name = "Giải trí", icon = "🎮", sortOrder = 6),
+    CategoryItem(name = "Hóa đơn", icon = "💳", sortOrder = 7),
+    CategoryItem(name = "Học tập", icon = "📚", sortOrder = 8)
 )
 
 val incomeCategories = listOf(
-    CategoryItem(name = "Lương", icon = "💰", type = "Thu"), CategoryItem(name = "Thưởng", icon = "🎁", type = "Thu"),
-    CategoryItem(name = "Đầu tư", icon = "📈", type = "Thu"), CategoryItem(name = "Kinh doanh", icon = "💼", type = "Thu"),
-    CategoryItem(name = "Part-time", icon = "🎯", type = "Thu"), CategoryItem(name = "Giải thưởng", icon = "🏆", type = "Thu"),
-    CategoryItem(name = "Quà tặng", icon = "💝", type = "Thu"), CategoryItem(name = "Khác", icon = "🔄", type = "Thu")
+    CategoryItem(name = "Lương", icon = "💰", type = "Thu", sortOrder = 1),
+    CategoryItem(name = "Thưởng", icon = "🎁", type = "Thu", sortOrder = 2),
+    CategoryItem(name = "Đầu tư", icon = "📈", type = "Thu", sortOrder = 3),
+    CategoryItem(name = "Kinh doanh", icon = "💼", type = "Thu", sortOrder = 4),
+    CategoryItem(name = "Part-time", icon = "🎯", type = "Thu", sortOrder = 5),
+    CategoryItem(name = "Giải thưởng", icon = "🏆", type = "Thu", sortOrder = 6),
+    CategoryItem(name = "Quà tặng", icon = "💝", type = "Thu", sortOrder = 7),
+    CategoryItem(name = "Khác", icon = "🔄", type = "Thu", sortOrder = 8)
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -82,6 +93,7 @@ fun AddTransactionScreen(
     val mainColor = if (type == "Chi") Color(0xFFFA3B70) else Color(0xFF00C875)
     val categories by viewModel.categories.collectAsState()
     val currentCategories = categories.filter { it.type == type }
+        .sortedWith(compareBy({ if (it.sortOrder == 0) Int.MAX_VALUE else it.sortOrder }, { it.name }))
 
     val isLoading by viewModel.isLoading.collectAsState()
     val context = LocalContext.current
@@ -224,14 +236,13 @@ fun AddTransactionScreen(
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    maxItemsInEachRow = 4 // 👉 Ép luôn 4 mục 1 hàng
+                    maxItemsInEachRow = 4
                 ) {
-                    currentCategories.forEach { cat ->
+                    currentCategories.take(8).forEach { cat ->
                         CategoryCard(
                             item = cat,
                             isSelected = category == cat.name,
                             activeColor = mainColor,
-                            // 👉 Dùng weight giúp các ô chia đều không gian thừa, vừa vặn mọi màn hình
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 category = cat.name

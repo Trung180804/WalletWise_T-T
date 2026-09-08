@@ -1,7 +1,12 @@
 package com.example.walletwise.presentation.home
 
+import android.app.Activity
+import android.app.AlarmManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,10 +14,20 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.walletwise.data.repository.TransactionRepositoryImpl
+import com.example.walletwise.domain.model.BudgetPlan
+import com.example.walletwise.domain.model.RecurringTransaction
+import com.example.walletwise.domain.model.Reminder
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.repository.TransactionRepository
+import com.example.walletwise.utils.NotificationHelper
+import com.example.walletwise.utils.RecurringTransactionExecutor
+import com.example.walletwise.utils.RecurringTransactionScheduler
+import com.example.walletwise.utils.ReminderScheduler
+import com.example.walletwise.utils.SettingsFirestoreMapper
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuth.AuthStateListener
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +65,23 @@ class TransactionViewModel(
     private val _categories = MutableStateFlow<List<CategoryItem>>(expenseCategories + incomeCategories)
     val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
 
+    // Danh sách Lời nhắc nhở & Giao dịch định kỳ
+    private val _reminders = MutableStateFlow<List<Reminder>>(emptyList())
+    val reminders: StateFlow<List<Reminder>> = _reminders.asStateFlow()
+
+    private val _recurringTransactions = MutableStateFlow<List<RecurringTransaction>>(emptyList())
+    val recurringTransactions: StateFlow<List<RecurringTransaction>> = _recurringTransactions.asStateFlow()
+    private var automationAppContext: Context? = null
+
+    // Keep one listener per source. Re-registering these on every auth update
+    // causes duplicate background work and can amplify a Firebase failure.
+    private var transactionsListener: ListenerRegistration? = null
+    private var profileListener: ListenerRegistration? = null
+    private var categoriesListener: ListenerRegistration? = null
+    private var remindersListener: ListenerRegistration? = null
+    private var recurringListener: ListenerRegistration? = null
+    private var authStateListener: AuthStateListener? = null
+
     // Biến lưu trữ giao dịch đang được chọn để Sửa
     var transactionToEdit by mutableStateOf<Transaction?>(null)
 
@@ -65,15 +97,35 @@ class TransactionViewModel(
         checkAndGenerateFakeData()
         checkCurrentStreakStatus()
         fetchCategories()
+        fetchReminders()
+        fetchRecurringTransactions()
+        fetchBudgetPlan()
 
-        auth.addAuthStateListener { firebaseAuth ->
+        authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             if (firebaseAuth.currentUser != null) {
                 loadTransactions()
                 loadUserProfile()
                 checkCurrentStreakStatus()
                 fetchCategories()
+                fetchReminders()
+                fetchRecurringTransactions()
+                fetchBudgetPlan()
+            } else {
+                automationAppContext?.let { context ->
+                    _reminders.value.forEach { ReminderScheduler.cancel(context, it.id) }
+                    _recurringTransactions.value.forEach {
+                        RecurringTransactionScheduler.cancel(context, it.id)
+                    }
+                }
+                remindersListener?.remove()
+                recurringListener?.remove()
+                remindersListener = null
+                recurringListener = null
+                _reminders.value = emptyList()
+                _recurringTransactions.value = emptyList()
             }
         }
+        auth.addAuthStateListener(authStateListener!!)
     }
 
     // --- LOGIC TÍNH TOÁN STREAK (LỬA) ---
@@ -237,6 +289,121 @@ class TransactionViewModel(
                     _transactions.value = list.sortedByDescending { it.timestamp }
                 }
         }
+        listenToTransactions()
+    }
+
+    fun listenToTransactions() {
+        val uid = auth.currentUser?.uid ?: return
+        transactionsListener?.remove()
+        transactionsListener = db.collection("users").document(uid).collection("transactions")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FIRESTORE_ERROR", "Unable to listen to transactions", error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { document ->
+                        runCatching { document.toObject(Transaction::class.java) }
+                            .onFailure {
+                                Log.e("FIRESTORE_ERROR", "Skipping invalid transaction ${document.id}", it)
+                            }
+                            .getOrNull()
+                    }
+                    _transactions.value = list.sortedByDescending { it.timestamp }
+                    _budgetPlan.value?.let { currentPlan ->
+                        _budgetPlan.value = recalculateBudgetSpent(currentPlan)
+                    }
+                }
+            }
+    }
+
+    // =========================================================
+    // LOGIC KẾ HOẠCH & PHÂN BỔ NGÂN SÁCH (SMART BUDGET & AI PLANNER)
+    // =========================================================
+    private val _budgetPlan = MutableStateFlow<BudgetPlan?>(null)
+    val budgetPlan: StateFlow<BudgetPlan?> = _budgetPlan.asStateFlow()
+    private var budgetListener: ListenerRegistration? = null
+
+    fun fetchBudgetPlan() {
+        val uid = auth.currentUser?.uid ?: return
+        val now = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+        val currentMonthYear = String.format("%02d-%d", now.monthValue, now.year)
+
+        budgetListener?.remove()
+        budgetListener = db.collection("users").document(uid).collection("budgets").document(currentMonthYear)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                if (snapshot != null && snapshot.exists()) {
+                    val plan = snapshot.toObject(BudgetPlan::class.java)
+                    if (plan != null) {
+                        _budgetPlan.value = recalculateBudgetSpent(plan)
+                    }
+                } else {
+                    _budgetPlan.value = null
+                }
+            }
+    }
+
+    fun saveBudgetPlan(totalBudget: Double, ruleType: String) {
+        val uid = auth.currentUser?.uid ?: return
+        val now = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+        val currentMonthYear = String.format("%02d-%d", now.monthValue, now.year)
+
+        val (needsLimit, wantsLimit, savingsLimit) = if (ruleType == "JARS") {
+            Triple(totalBudget * 0.55, totalBudget * 0.10, totalBudget * 0.35)
+        } else {
+            Triple(totalBudget * 0.50, totalBudget * 0.30, totalBudget * 0.20)
+        }
+
+        val newPlan = BudgetPlan(
+            id = uid,
+            monthYear = currentMonthYear,
+            totalBudget = totalBudget,
+            ruleType = ruleType,
+            needsLimit = needsLimit,
+            wantsLimit = wantsLimit,
+            savingsLimit = savingsLimit
+        )
+
+        // Cập nhật StateFlow lập tức để UI nhận dữ liệu ngay không cần đợi mạng
+        _budgetPlan.value = recalculateBudgetSpent(newPlan)
+
+        db.collection("users").document(uid).collection("budgets").document(currentMonthYear).set(newPlan)
+            .addOnFailureListener { e ->
+                Log.e("FIRESTORE_ERROR", "Error saving budget plan", e)
+            }
+    }
+
+    private fun recalculateBudgetSpent(plan: BudgetPlan): BudgetPlan {
+        val now = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
+        val currentMonth = now.monthValue
+        val currentYear = now.year
+
+        val monthTxs = _transactions.value.filter { tx ->
+            val cal = java.util.Calendar.getInstance().apply { timeInMillis = tx.timestamp }
+            cal.get(java.util.Calendar.MONTH) + 1 == currentMonth && cal.get(java.util.Calendar.YEAR) == currentYear
+        }
+
+        val needsCategories = setOf("Ăn uống", "Nhà cửa", "Di chuyển", "Y tế", "Đi chợ", "Điện nước", "Xăng xe", "Tiền nhà", "Hóa đơn")
+        val savingsCategories = setOf("Tiết kiệm", "Đầu tư", "Quỹ khẩn cấp")
+
+        var needsSpent = 0.0
+        var wantsSpent = 0.0
+        var savingsSpent = 0.0
+
+        monthTxs.filter { it.type == "Chi" }.forEach { tx ->
+            when {
+                needsCategories.contains(tx.category) -> needsSpent += tx.amount
+                savingsCategories.contains(tx.category) -> savingsSpent += tx.amount
+                else -> wantsSpent += tx.amount
+            }
+        }
+
+        return plan.copy(
+            needsSpent = needsSpent,
+            wantsSpent = wantsSpent,
+            savingsSpent = savingsSpent
+        )
     }
 
     fun processAITransaction(userInput: String) {
@@ -366,11 +533,19 @@ class TransactionViewModel(
 
     fun loadUserProfile() {
         val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid)
-            .addSnapshotListener { snapshot, _ ->
+        profileListener?.remove()
+        profileListener = db.collection("users").document(uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FIRESTORE_ERROR", "Unable to listen to user profile", error)
+                    return@addSnapshotListener
+                }
                 if (snapshot != null && snapshot.exists()) {
-                    val user = snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
-                    _userProfile.value = user
+                    _userProfile.value = runCatching {
+                        snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
+                    }.onFailure {
+                        Log.e("FIRESTORE_ERROR", "Ignoring invalid user profile", it)
+                    }.getOrNull()
                 }
             }
     }
@@ -379,15 +554,22 @@ class TransactionViewModel(
         val uid = auth.currentUser?.uid ?: return
 
         // addSnapshotListener giúp dữ liệu tự động cập nhật realtime khi có thay đổi
-        db.collection("users").document(uid).collection("categories")
+        categoriesListener?.remove()
+        categoriesListener = db.collection("users").document(uid).collection("categories")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // Xử lý lỗi nếu cần
+                    Log.e("FIRESTORE_ERROR", "Unable to listen to categories", error)
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { it.toObject(CategoryItem::class.java) }
+                    val list = snapshot.documents.mapNotNull { document ->
+                        runCatching { document.toObject(CategoryItem::class.java) }
+                            .onFailure {
+                                Log.e("FIRESTORE_ERROR", "Skipping invalid category ${document.id}", it)
+                            }
+                            .getOrNull()
+                    }
                     if (list.isEmpty()) {
                         // Nếu user mới tinh chưa có danh mục, đẩy danh sách mặc định lên Firebase
                         seedDefaultCategories(uid)
@@ -400,10 +582,10 @@ class TransactionViewModel(
 
     // TẠO DỮ LIỆU MẶC ĐỊNH LẦN ĐẦU (CREATE DEFAULTS)
     private fun seedDefaultCategories(uid: String) {
-        // Giả sử bạn đã import expenseCategories và incomeCategories từ AddTransactionScreen
         val defaults = expenseCategories + incomeCategories
         defaults.forEach { cat ->
             db.collection("users").document(uid).collection("categories").document(cat.id).set(cat)
+                .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error seeding categories", it) }
         }
     }
 
@@ -411,17 +593,470 @@ class TransactionViewModel(
     fun addCategory(category: CategoryItem) {
         val uid = auth.currentUser?.uid ?: return
         db.collection("users").document(uid).collection("categories").document(category.id).set(category)
+            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error adding category", it) }
     }
 
     // CẬP NHẬT DANH MỤC (UPDATE)
     fun updateCategory(category: CategoryItem) {
         val uid = auth.currentUser?.uid ?: return
         db.collection("users").document(uid).collection("categories").document(category.id).set(category)
+            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error updating category", it) }
     }
 
     // XÓA DANH MỤC (DELETE)
     fun deleteCategory(categoryId: String) {
         val uid = auth.currentUser?.uid ?: return
         db.collection("users").document(uid).collection("categories").document(categoryId).delete()
+            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error deleting category", it) }
+    }
+
+    // ĐỔI VỊ TRÍ 2 DANH MỤC (SWAP POSITIONS)
+    fun swapCategoryPositions(cat1: CategoryItem, cat2: CategoryItem) {
+        val uid = auth.currentUser?.uid ?: return
+        db.collection("users").document(uid).collection("categories").document(cat1.id).set(cat1)
+            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error swapping cat1", it) }
+        db.collection("users").document(uid).collection("categories").document(cat2.id).set(cat2)
+            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error swapping cat2", it) }
+    }
+
+    // =========================================================
+    // LOGIC LỜI NHẮC NHỞ (REMINDERS)
+    // =========================================================
+    fun fetchReminders() {
+        val uid = auth.currentUser?.uid ?: return
+        remindersListener?.remove()
+        remindersListener = db.collection("users").document(uid).collection("reminders")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FIRESTORE_ERROR", "Unable to listen to reminders", error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { document ->
+                        runCatching {
+                            SettingsFirestoreMapper.reminderFromMap(
+                                documentId = document.id,
+                                ownerUserId = uid,
+                                data = document.data.orEmpty()
+                            )
+                        }
+                            .onFailure {
+                                Log.e("FIRESTORE_ERROR", "Skipping invalid reminder ${document.id}", it)
+                            }
+                            .getOrNull()
+                    }
+                    _reminders.value = list
+                    synchronizeReminders(list)
+                }
+            }
+    }
+
+    fun addReminder(
+        reminder: Reminder,
+        context: Context,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để lưu lời nhắc")))
+            return
+        }
+        val finalReminder = reminder.copy(userId = uid)
+        db.collection("users").document(uid).collection("reminders")
+            .document(finalReminder.id).set(SettingsFirestoreMapper.reminderToMap(finalReminder))
+            .addOnSuccessListener {
+                _reminders.value = _reminders.value
+                    .filterNot { it.id == finalReminder.id } + finalReminder
+                ReminderScheduler.schedule(context.applicationContext, finalReminder)
+                requestExactAlarmPermissionIfNeeded(context)
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener {
+                Log.e("FIRESTORE_ERROR", "Error adding reminder", it)
+                onComplete(Result.failure(it))
+            }
+    }
+
+    fun deleteReminder(
+        reminderId: String,
+        context: Context? = automationAppContext,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để xóa lời nhắc")))
+            return
+        }
+        val existing = _reminders.value.firstOrNull { it.id == reminderId }
+        val appContext = context?.applicationContext ?: automationAppContext
+        appContext?.let { ReminderScheduler.cancel(it, reminderId) }
+        db.collection("users").document(uid).collection("reminders").document(reminderId).delete()
+            .addOnSuccessListener {
+                _reminders.value = _reminders.value.filterNot { it.id == reminderId }
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener { error ->
+                if (appContext != null && existing?.isEnabled == true) {
+                    ReminderScheduler.schedule(appContext, existing)
+                }
+                Log.e("FIRESTORE_ERROR", "Error deleting reminder", error)
+                onComplete(Result.failure(error))
+            }
+    }
+
+    fun setReminderEnabled(
+        reminder: Reminder,
+        isEnabled: Boolean,
+        context: Context? = null,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để cập nhật lời nhắc")))
+            return
+        }
+        val updated = reminder.copy(userId = uid, isEnabled = isEnabled)
+        _reminders.value = _reminders.value.map { if (it.id == updated.id) updated else it }
+        db.collection("users").document(uid).collection("reminders").document(updated.id)
+            .update(SettingsFirestoreMapper.enabledFields(isEnabled))
+            .addOnSuccessListener {
+                val appContext = context?.applicationContext ?: automationAppContext
+                if (isEnabled && appContext != null) {
+                    ReminderScheduler.schedule(appContext, updated)
+                    context?.let(::requestExactAlarmPermissionIfNeeded)
+                } else if (!isEnabled && appContext != null) {
+                    ReminderScheduler.cancel(appContext, updated.id)
+                }
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener {
+                _reminders.value = _reminders.value.map { current ->
+                    if (current.id == reminder.id && current.isEnabled == isEnabled) reminder else current
+                }
+                Log.e("FIRESTORE_ERROR", "Error toggling reminder", it)
+                onComplete(Result.failure(it))
+            }
+    }
+
+    fun updateReminder(
+        reminder: Reminder,
+        context: Context,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để cập nhật lời nhắc")))
+            return
+        }
+        val updated = reminder.copy(userId = uid)
+        db.collection("users").document(uid).collection("reminders").document(updated.id)
+            .set(SettingsFirestoreMapper.reminderToMap(updated))
+            .addOnSuccessListener {
+                _reminders.value = _reminders.value.map { if (it.id == updated.id) updated else it }
+                if (updated.isEnabled) {
+                    ReminderScheduler.schedule(context.applicationContext, updated)
+                    requestExactAlarmPermissionIfNeeded(context)
+                } else {
+                    ReminderScheduler.cancel(context.applicationContext, updated.id)
+                }
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener {
+                Log.e("FIRESTORE_ERROR", "Error updating reminder", it)
+                onComplete(Result.failure(it))
+            }
+    }
+
+    // =========================================================
+    // LOGIC GIAO DỊCH ĐỊNH KỲ (RECURRING TRANSACTIONS)
+    // =========================================================
+    fun fetchRecurringTransactions(context: Context? = null) {
+        context?.let { automationAppContext = it.applicationContext }
+        val uid = auth.currentUser?.uid ?: return
+        recurringListener?.remove()
+        recurringListener = db.collection("users").document(uid).collection("recurring_transactions")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FIRESTORE_ERROR", "Unable to listen to recurring transactions", error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { document ->
+                        runCatching {
+                            SettingsFirestoreMapper.recurringFromMap(
+                                documentId = document.id,
+                                ownerUserId = uid,
+                                data = document.data.orEmpty()
+                            )
+                        }
+                            .onFailure {
+                                Log.e("FIRESTORE_ERROR", "Skipping invalid recurring transaction ${document.id}", it)
+                            }
+                            .getOrNull()
+                    }
+                    _recurringTransactions.value = list
+                    synchronizeRecurringTransactions(list)
+                }
+            }
+    }
+
+    fun addRecurringTransaction(
+        recurring: RecurringTransaction,
+        context: Context,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để lưu giao dịch định kỳ")))
+            return
+        }
+        val finalRecurring = recurring.copy(userId = uid)
+        db.collection("users").document(uid).collection("recurring_transactions")
+            .document(finalRecurring.id).set(SettingsFirestoreMapper.recurringToMap(finalRecurring))
+            .addOnSuccessListener {
+                _recurringTransactions.value = _recurringTransactions.value
+                    .filterNot { it.id == finalRecurring.id } + finalRecurring
+                NotificationHelper.showNotification(
+                    context,
+                    finalRecurring.id.hashCode(),
+                    "WalletWise - Giao dịch định kỳ",
+                    "Đã đặt giao dịch định kỳ '${finalRecurring.title}' (${finalRecurring.amount.toLong()}đ)"
+                )
+                synchronizeRecurringTransactions(listOf(finalRecurring), context.applicationContext)
+                requestExactAlarmPermissionIfNeeded(context)
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener {
+                Log.e("FIRESTORE_ERROR", "Error adding recurring tx", it)
+                onComplete(Result.failure(it))
+            }
+    }
+
+    fun updateRecurringTransaction(
+        recurring: RecurringTransaction,
+        context: Context,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để cập nhật giao dịch định kỳ")))
+            return
+        }
+        val updated = recurring.copy(userId = uid)
+        db.collection("users").document(uid).collection("recurring_transactions")
+            .document(updated.id).set(SettingsFirestoreMapper.recurringToMap(updated))
+            .addOnSuccessListener {
+                _recurringTransactions.value = _recurringTransactions.value.map {
+                    if (it.id == updated.id) updated else it
+                }
+                if (updated.isEnabled) {
+                    synchronizeRecurringTransactions(listOf(updated), context.applicationContext)
+                    requestExactAlarmPermissionIfNeeded(context)
+                } else {
+                    RecurringTransactionScheduler.cancel(context.applicationContext, updated.id)
+                }
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener {
+                Log.e("FIRESTORE_ERROR", "Error updating recurring tx", it)
+                onComplete(Result.failure(it))
+            }
+    }
+
+    fun deleteRecurringTransaction(
+        id: String,
+        context: Context? = automationAppContext,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để xóa giao dịch định kỳ")))
+            return
+        }
+        val existing = _recurringTransactions.value.firstOrNull { it.id == id }
+        val appContext = context?.applicationContext ?: automationAppContext
+        appContext?.let { RecurringTransactionScheduler.cancel(it, id) }
+        db.collection("users").document(uid).collection("recurring_transactions").document(id).delete()
+            .addOnSuccessListener {
+                _recurringTransactions.value = _recurringTransactions.value.filterNot { it.id == id }
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener { error ->
+                if (appContext != null && existing?.isEnabled == true) {
+                    RecurringTransactionScheduler.schedule(appContext, existing)
+                }
+                Log.e("FIRESTORE_ERROR", "Error deleting recurring tx", error)
+                onComplete(Result.failure(error))
+            }
+    }
+
+    fun setRecurringTransactionEnabled(
+        recurring: RecurringTransaction,
+        isEnabled: Boolean,
+        context: Context? = null,
+        onComplete: (Result<Unit>) -> Unit = {}
+    ) {
+        val uid = auth.currentUser?.uid
+        if (uid == null) {
+            onComplete(Result.failure(IllegalStateException("Bạn cần đăng nhập để cập nhật giao dịch định kỳ")))
+            return
+        }
+        val updated = recurring.copy(userId = uid, isEnabled = isEnabled)
+        _recurringTransactions.value = _recurringTransactions.value.map { if (it.id == updated.id) updated else it }
+        db.collection("users").document(uid).collection("recurring_transactions")
+            .document(updated.id).update(SettingsFirestoreMapper.enabledFields(isEnabled))
+            .addOnSuccessListener {
+                if (isEnabled && context != null) {
+                    synchronizeRecurringTransactions(listOf(updated), context.applicationContext)
+                    requestExactAlarmPermissionIfNeeded(context)
+                } else if (!isEnabled) {
+                    val appContext = context?.applicationContext ?: automationAppContext
+                    if (appContext != null) RecurringTransactionScheduler.cancel(appContext, updated.id)
+                }
+                onComplete(Result.success(Unit))
+            }
+            .addOnFailureListener {
+                _recurringTransactions.value = _recurringTransactions.value.map { current ->
+                    if (current.id == recurring.id && current.isEnabled == isEnabled) recurring else current
+                }
+                Log.e("FIRESTORE_ERROR", "Error toggling recurring transaction", it)
+                onComplete(Result.failure(it))
+            }
+    }
+
+    /** Starts reminder and recurring-transaction scheduling once a context is available. */
+    fun initializeScheduledAutomation(context: Context) {
+        automationAppContext = context.applicationContext
+        synchronizeReminders(_reminders.value, context.applicationContext)
+        synchronizeRecurringTransactions(_recurringTransactions.value, context.applicationContext)
+    }
+
+    /**
+     * Reconciles overdue rules while the app is open. The executor uses a
+     * Firestore transaction, so this is safe to run beside an alarm callback.
+     */
+    fun checkAndExecuteRecurringTransactions(
+        context: Context,
+        list: List<RecurringTransaction> = _recurringTransactions.value
+    ) {
+        automationAppContext = context.applicationContext
+        synchronizeRecurringTransactions(list, context.applicationContext)
+    }
+
+    private fun synchronizeReminders(
+        list: List<Reminder>,
+        context: Context? = automationAppContext
+    ) {
+        val appContext = context ?: return
+        list.forEach { reminder ->
+            if (reminder.isEnabled) {
+                ReminderScheduler.schedule(appContext, reminder)
+            } else {
+                ReminderScheduler.cancel(appContext, reminder.id)
+            }
+        }
+    }
+
+    private fun synchronizeRecurringTransactions(
+        list: List<RecurringTransaction>,
+        context: Context? = automationAppContext
+    ) {
+        val appContext = context ?: return
+        val uid = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            list.forEach { recurring ->
+                try {
+                    if (!recurring.isEnabled) {
+                        RecurringTransactionScheduler.cancel(appContext, recurring.id)
+                        return@forEach
+                    }
+
+                    val result = RecurringTransactionExecutor.executeIfDue(appContext, uid, recurring)
+                    result.recurring?.let { refreshedRecurring ->
+                        RecurringTransactionScheduler.schedule(appContext, refreshedRecurring)
+                    }
+                    if (result.transactionWasCreated) {
+                        NotificationHelper.showNotification(
+                            appContext,
+                            recurring.id.hashCode(),
+                            "WalletWise - Giao dịch định kỳ",
+                            "Đã tự động thêm giao dịch ${recurring.type}: ${recurring.title} (${recurring.amount.toLong()}đ)"
+                        )
+                        loadTransactions()
+                    }
+                } catch (error: Exception) {
+                    // A bad legacy record, network outage, or Firestore rule must
+                    // never terminate viewModelScope and close the app.
+                    RecurringTransactionScheduler.scheduleRetry(
+                        appContext,
+                        uid,
+                        recurring.id,
+                        retryAttempt = 1
+                    )
+                    Log.e("RECURRING_SYNC", "Unable to process recurring transaction ${recurring.id}", error)
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        transactionsListener?.remove()
+        profileListener?.remove()
+        categoriesListener?.remove()
+        remindersListener?.remove()
+        recurringListener?.remove()
+        authStateListener?.let(auth::removeAuthStateListener)
+        super.onCleared()
+    }
+
+    private fun requestExactAlarmPermissionIfNeeded(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || context !is Activity) return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (!alarmManager.canScheduleExactAlarms()) {
+            context.startActivity(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+            )
+        }
+    }
+
+    // Kept only for reference while migrating existing users. All callers use
+    // the atomic scheduler-based function above.
+    private fun legacyCheckAndExecuteRecurringTransactions(context: Context, list: List<RecurringTransaction> = _recurringTransactions.value) {
+        val uid = auth.currentUser?.uid ?: return
+        val todayStr = LocalDate.now().toString()
+
+        list.filter { it.isEnabled }.forEach { recurring ->
+            if (recurring.lastExecutedDate != todayStr) {
+                val newTx = Transaction(
+                    userId = uid,
+                    amount = recurring.amount,
+                    type = recurring.type,
+                    category = recurring.category,
+                    paymentMethod = recurring.paymentMethod,
+                    note = "[Định kỳ] ${recurring.title}${if (recurring.note.isNotBlank()) " - " + recurring.note else ""}",
+                    timestamp = System.currentTimeMillis()
+                )
+
+                viewModelScope.launch {
+                    repository.addTransaction(newTx, null, context)
+                        .onSuccess {
+                            val updated = recurring.copy(lastExecutedDate = todayStr)
+                            db.collection("users").document(uid).collection("recurring_transactions")
+                                .document(recurring.id).set(SettingsFirestoreMapper.recurringToMap(updated))
+
+                            NotificationHelper.showNotification(
+                                context,
+                                recurring.id.hashCode(),
+                                "WalletWise - Tự động trích tiền",
+                                "Đã tự động thêm giao dịch ${recurring.type}: ${recurring.title} (${recurring.amount.toLong()}đ)"
+                            )
+
+                            loadTransactions()
+                        }
+                }
+            }
+        }
     }
 }
