@@ -39,41 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
-import com.google.firebase.firestore.PropertyName
 import java.io.File
-import java.util.UUID
+import com.example.walletwise.domain.model.Category
+import com.example.walletwise.domain.model.DefaultExpenseCategories
 
-data class CategoryItem(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String = "",
-    val icon: String = "",
-    val type: String = "Chi",
-    @get:PropertyName("isCustom") @field:PropertyName("isCustom")
-    val isCustom: Boolean = false,
-    val sortOrder: Int = 0
-)
-
-val expenseCategories = listOf(
-    CategoryItem(name = "Ăn uống", icon = "🍔", sortOrder = 1),
-    CategoryItem(name = "Mua sắm", icon = "🛒", sortOrder = 2),
-    CategoryItem(name = "Nhà cửa", icon = "🏠", sortOrder = 3),
-    CategoryItem(name = "Di chuyển", icon = "🚗", sortOrder = 4),
-    CategoryItem(name = "Y tế", icon = "💊", sortOrder = 5),
-    CategoryItem(name = "Giải trí", icon = "🎮", sortOrder = 6),
-    CategoryItem(name = "Hóa đơn", icon = "💳", sortOrder = 7),
-    CategoryItem(name = "Học tập", icon = "📚", sortOrder = 8)
-)
-
-val incomeCategories = listOf(
-    CategoryItem(name = "Lương", icon = "💰", type = "Thu", sortOrder = 1),
-    CategoryItem(name = "Thưởng", icon = "🎁", type = "Thu", sortOrder = 2),
-    CategoryItem(name = "Đầu tư", icon = "📈", type = "Thu", sortOrder = 3),
-    CategoryItem(name = "Kinh doanh", icon = "💼", type = "Thu", sortOrder = 4),
-    CategoryItem(name = "Part-time", icon = "🎯", type = "Thu", sortOrder = 5),
-    CategoryItem(name = "Giải thưởng", icon = "🏆", type = "Thu", sortOrder = 6),
-    CategoryItem(name = "Quà tặng", icon = "💝", type = "Thu", sortOrder = 7),
-    CategoryItem(name = "Khác", icon = "🔄", type = "Thu", sortOrder = 8)
-)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -87,7 +56,7 @@ fun AddTransactionScreen(
     var type by remember { mutableStateOf(txToEdit?.type ?: "Chi") }
     var amount by remember { mutableStateOf(if (isEditMode) txToEdit!!.amount.toLong().toString() else "") }
     var note by remember { mutableStateOf(txToEdit?.note ?: "") }
-    var category by remember { mutableStateOf(txToEdit?.category ?: expenseCategories[0].name) }
+    var category by remember { mutableStateOf(txToEdit?.category ?: DefaultExpenseCategories[0].name) }
     var selectedWallet by remember { mutableStateOf(txToEdit?.paymentMethod ?: "Tiền mặt") }
 
     val mainColor = if (type == "Chi") Color(0xFFFA3B70) else Color(0xFF00C875)
@@ -325,7 +294,7 @@ fun AnimatedSegmentedSlider(currentType: String, onTypeChange: (String) -> Unit)
 
 // 👉 Đã thêm modifier truyền từ ngoài vào để fix cứng width
 @Composable
-fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun CategoryCard(item: Category, isSelected: Boolean, activeColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val unselectedBgColor = MaterialTheme.colorScheme.surfaceVariant
     val selectedBgColor = activeColor.copy(alpha = 0.15f)
 

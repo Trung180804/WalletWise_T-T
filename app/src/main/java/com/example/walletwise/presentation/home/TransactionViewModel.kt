@@ -13,12 +13,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.walletwise.data.image.AndroidTransactionWriter
+import com.example.walletwise.data.repository.CategoryRepositoryImpl
+import com.example.walletwise.data.repository.BudgetPlanRepositoryImpl
 import com.example.walletwise.data.repository.TransactionRepositoryImpl
-import com.example.walletwise.domain.model.BudgetPlan
+import com.example.walletwise.data.time.AndroidBudgetDateProvider
+import com.example.walletwise.domain.model.Category
+import com.example.walletwise.domain.model.DefaultCategories
 import com.example.walletwise.domain.model.RecurringTransaction
 import com.example.walletwise.domain.model.Reminder
 import com.example.walletwise.domain.model.Transaction
+import com.example.walletwise.domain.repository.CategoryRepository
+import com.example.walletwise.domain.repository.BudgetPlanRepository
 import com.example.walletwise.domain.repository.TransactionRepository
+import com.example.walletwise.domain.service.BudgetCalendar
+import com.example.walletwise.domain.service.BudgetDateProvider
+import com.example.walletwise.presentation.budget.BudgetSessionController
+import com.example.walletwise.presentation.budget.SmartBudgetPresenter
+import com.example.walletwise.presentation.category.CategorySessionController
+import com.example.walletwise.presentation.category.CategoryUiPresenter
 import com.example.walletwise.utils.NotificationHelper
 import com.example.walletwise.utils.RecurringTransactionExecutor
 import com.example.walletwise.utils.RecurringTransactionScheduler
@@ -31,6 +44,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.time.LocalDate
@@ -41,8 +55,16 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 class TransactionViewModel(
-    private val repository: TransactionRepository = TransactionRepositoryImpl()
+    private val repository: TransactionRepository = TransactionRepositoryImpl(),
+    transactionWriter: AndroidTransactionWriter? = null,
+    private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
+    private val budgetRepository: BudgetPlanRepository = BudgetPlanRepositoryImpl(),
+    private val budgetDateProvider: BudgetDateProvider = AndroidBudgetDateProvider()
 ) : ViewModel() {
+
+    private val transactionWriter = transactionWriter
+        ?: (repository as? TransactionRepositoryImpl)?.androidWriter()
+        ?: error("AndroidTransactionWriter must be supplied with a custom repository")
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
@@ -62,8 +84,19 @@ class TransactionViewModel(
     val streakCount: StateFlow<Int> = _streakCount.asStateFlow()
 
     // Biến lưu trữ danh sách danh mục
-    private val _categories = MutableStateFlow<List<CategoryItem>>(expenseCategories + incomeCategories)
-    val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
+    private val categorySessionController = CategorySessionController(
+        scope = viewModelScope,
+        repository = categoryRepository
+    )
+    val categorySessionState = categorySessionController.state
+    private val _categories = MutableStateFlow<List<Category>>(DefaultCategories)
+    val categories: StateFlow<List<Category>> = _categories.asStateFlow()
+
+    private val budgetSessionController = BudgetSessionController(
+        scope = viewModelScope,
+        repository = budgetRepository
+    )
+    val budgetSessionState = budgetSessionController.state
 
     // Danh sách Lời nhắc nhở & Giao dịch định kỳ
     private val _reminders = MutableStateFlow<List<Reminder>>(emptyList())
@@ -77,7 +110,6 @@ class TransactionViewModel(
     // causes duplicate background work and can amplify a Firebase failure.
     private var transactionsListener: ListenerRegistration? = null
     private var profileListener: ListenerRegistration? = null
-    private var categoriesListener: ListenerRegistration? = null
     private var remindersListener: ListenerRegistration? = null
     private var recurringListener: ListenerRegistration? = null
     private var authStateListener: AuthStateListener? = null
@@ -92,6 +124,9 @@ class TransactionViewModel(
     var aiPendingTransaction by mutableStateOf<Transaction?>(null)
 
     init {
+        viewModelScope.launch {
+            categorySessionState.collect { _categories.value = it.categories }
+        }
         loadTransactions()
         loadUserProfile()
         checkAndGenerateFakeData()
@@ -99,7 +134,7 @@ class TransactionViewModel(
         fetchCategories()
         fetchReminders()
         fetchRecurringTransactions()
-        fetchBudgetPlan()
+        refreshBudgetSession()
 
         authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             if (firebaseAuth.currentUser != null) {
@@ -109,8 +144,10 @@ class TransactionViewModel(
                 fetchCategories()
                 fetchReminders()
                 fetchRecurringTransactions()
-                fetchBudgetPlan()
+                refreshBudgetSession()
             } else {
+                categorySessionController.setUserId(null)
+                budgetSessionController.setSession(null, "")
                 automationAppContext?.let { context ->
                     _reminders.value.forEach { ReminderScheduler.cancel(context, it.id) }
                     _recurringTransactions.value.forEach {
@@ -310,99 +347,26 @@ class TransactionViewModel(
                             .getOrNull()
                     }
                     _transactions.value = list.sortedByDescending { it.timestamp }
-                    _budgetPlan.value?.let { currentPlan ->
-                        _budgetPlan.value = recalculateBudgetSpent(currentPlan)
-                    }
                 }
             }
     }
 
-    // =========================================================
-    // LOGIC KẾ HOẠCH & PHÂN BỔ NGÂN SÁCH (SMART BUDGET & AI PLANNER)
-    // =========================================================
-    private val _budgetPlan = MutableStateFlow<BudgetPlan?>(null)
-    val budgetPlan: StateFlow<BudgetPlan?> = _budgetPlan.asStateFlow()
-    private var budgetListener: ListenerRegistration? = null
-
-    fun fetchBudgetPlan() {
-        val uid = auth.currentUser?.uid ?: return
-        val now = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-        val currentMonthYear = String.format("%02d-%d", now.monthValue, now.year)
-
-        budgetListener?.remove()
-        budgetListener = db.collection("users").document(uid).collection("budgets").document(currentMonthYear)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                if (snapshot != null && snapshot.exists()) {
-                    val plan = snapshot.toObject(BudgetPlan::class.java)
-                    if (plan != null) {
-                        _budgetPlan.value = recalculateBudgetSpent(plan)
-                    }
-                } else {
-                    _budgetPlan.value = null
-                }
-            }
-    }
-
-    fun saveBudgetPlan(totalBudget: Double, ruleType: String) {
-        val uid = auth.currentUser?.uid ?: return
-        val now = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-        val currentMonthYear = String.format("%02d-%d", now.monthValue, now.year)
-
-        val (needsLimit, wantsLimit, savingsLimit) = if (ruleType == "JARS") {
-            Triple(totalBudget * 0.55, totalBudget * 0.10, totalBudget * 0.35)
-        } else {
-            Triple(totalBudget * 0.50, totalBudget * 0.30, totalBudget * 0.20)
-        }
-
-        val newPlan = BudgetPlan(
-            id = uid,
-            monthYear = currentMonthYear,
-            totalBudget = totalBudget,
-            ruleType = ruleType,
-            needsLimit = needsLimit,
-            wantsLimit = wantsLimit,
-            savingsLimit = savingsLimit
+    fun refreshBudgetSession() {
+        val date = budgetDateProvider.currentLocalDate()
+        budgetSessionController.setSession(
+            userId = auth.currentUser?.uid,
+            monthKey = BudgetCalendar.monthKey(date)
         )
-
-        // Cập nhật StateFlow lập tức để UI nhận dữ liệu ngay không cần đợi mạng
-        _budgetPlan.value = recalculateBudgetSpent(newPlan)
-
-        db.collection("users").document(uid).collection("budgets").document(currentMonthYear).set(newPlan)
-            .addOnFailureListener { e ->
-                Log.e("FIRESTORE_ERROR", "Error saving budget plan", e)
-            }
     }
 
-    private fun recalculateBudgetSpent(plan: BudgetPlan): BudgetPlan {
-        val now = java.time.LocalDate.now(java.time.ZoneId.systemDefault())
-        val currentMonth = now.monthValue
-        val currentYear = now.year
-
-        val monthTxs = _transactions.value.filter { tx ->
-            val cal = java.util.Calendar.getInstance().apply { timeInMillis = tx.timestamp }
-            cal.get(java.util.Calendar.MONTH) + 1 == currentMonth && cal.get(java.util.Calendar.YEAR) == currentYear
-        }
-
-        val needsCategories = setOf("Ăn uống", "Nhà cửa", "Di chuyển", "Y tế", "Đi chợ", "Điện nước", "Xăng xe", "Tiền nhà", "Hóa đơn")
-        val savingsCategories = setOf("Tiết kiệm", "Đầu tư", "Quỹ khẩn cấp")
-
-        var needsSpent = 0.0
-        var wantsSpent = 0.0
-        var savingsSpent = 0.0
-
-        monthTxs.filter { it.type == "Chi" }.forEach { tx ->
-            when {
-                needsCategories.contains(tx.category) -> needsSpent += tx.amount
-                savingsCategories.contains(tx.category) -> savingsSpent += tx.amount
-                else -> wantsSpent += tx.amount
-            }
-        }
-
-        return plan.copy(
-            needsSpent = needsSpent,
-            wantsSpent = wantsSpent,
-            savingsSpent = savingsSpent
+    fun createSmartBudgetPresenter(scope: CoroutineScope): SmartBudgetPresenter {
+        refreshBudgetSession()
+        return SmartBudgetPresenter(
+            scope = scope,
+            budgetSession = budgetSessionState,
+            transactions = transactions,
+            repository = budgetRepository,
+            dateProvider = budgetDateProvider
         )
     }
 
@@ -483,7 +447,7 @@ class TransactionViewModel(
                 paymentMethod = paymentMethod
             )
 
-            repository.addTransaction(trans, imageUri, context)
+            transactionWriter.add(trans, imageUri, context)
                 .onSuccess {
                     calculateAndGetStreak() // Tự động cập nhật lửa
                     loadTransactions()
@@ -516,7 +480,7 @@ class TransactionViewModel(
         viewModelScope.launch {
             _isLoading.value = true
 
-            repository.updateTransaction(transaction, imageUri, context)
+            transactionWriter.update(transaction, imageUri, context)
                 .onSuccess {
                     calculateAndGetStreak() // Cập nhật lửa
                     loadTransactions()
@@ -551,73 +515,15 @@ class TransactionViewModel(
     }
 
     private fun fetchCategories() {
-        val uid = auth.currentUser?.uid ?: return
-
-        // addSnapshotListener giúp dữ liệu tự động cập nhật realtime khi có thay đổi
-        categoriesListener?.remove()
-        categoriesListener = db.collection("users").document(uid).collection("categories")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("FIRESTORE_ERROR", "Unable to listen to categories", error)
-                    return@addSnapshotListener
-                }
-
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { document ->
-                        runCatching { document.toObject(CategoryItem::class.java) }
-                            .onFailure {
-                                Log.e("FIRESTORE_ERROR", "Skipping invalid category ${document.id}", it)
-                            }
-                            .getOrNull()
-                    }
-                    if (list.isEmpty()) {
-                        // Nếu user mới tinh chưa có danh mục, đẩy danh sách mặc định lên Firebase
-                        seedDefaultCategories(uid)
-                    } else {
-                        _categories.value = list
-                    }
-                }
-            }
+        categorySessionController.setUserId(auth.currentUser?.uid)
     }
 
-    // TẠO DỮ LIỆU MẶC ĐỊNH LẦN ĐẦU (CREATE DEFAULTS)
-    private fun seedDefaultCategories(uid: String) {
-        val defaults = expenseCategories + incomeCategories
-        defaults.forEach { cat ->
-            db.collection("users").document(uid).collection("categories").document(cat.id).set(cat)
-                .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error seeding categories", it) }
-        }
-    }
-
-    // THÊM DANH MỤC MỚI (CREATE)
-    fun addCategory(category: CategoryItem) {
-        val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid).collection("categories").document(category.id).set(category)
-            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error adding category", it) }
-    }
-
-    // CẬP NHẬT DANH MỤC (UPDATE)
-    fun updateCategory(category: CategoryItem) {
-        val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid).collection("categories").document(category.id).set(category)
-            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error updating category", it) }
-    }
-
-    // XÓA DANH MỤC (DELETE)
-    fun deleteCategory(categoryId: String) {
-        val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid).collection("categories").document(categoryId).delete()
-            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error deleting category", it) }
-    }
-
-    // ĐỔI VỊ TRÍ 2 DANH MỤC (SWAP POSITIONS)
-    fun swapCategoryPositions(cat1: CategoryItem, cat2: CategoryItem) {
-        val uid = auth.currentUser?.uid ?: return
-        db.collection("users").document(uid).collection("categories").document(cat1.id).set(cat1)
-            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error swapping cat1", it) }
-        db.collection("users").document(uid).collection("categories").document(cat2.id).set(cat2)
-            .addOnFailureListener { Log.e("FIRESTORE_ERROR", "Error swapping cat2", it) }
-    }
+    fun createCategoryPresenter(scope: CoroutineScope): CategoryUiPresenter =
+        CategoryUiPresenter(
+            scope = scope,
+            sessionState = categorySessionState,
+            repository = categoryRepository
+        )
 
     // =========================================================
     // LOGIC LỜI NHẮC NHỞ (REMINDERS)
@@ -1002,7 +908,8 @@ class TransactionViewModel(
     override fun onCleared() {
         transactionsListener?.remove()
         profileListener?.remove()
-        categoriesListener?.remove()
+        categorySessionController.close()
+        budgetSessionController.close()
         remindersListener?.remove()
         recurringListener?.remove()
         authStateListener?.let(auth::removeAuthStateListener)
@@ -1040,7 +947,7 @@ class TransactionViewModel(
                 )
 
                 viewModelScope.launch {
-                    repository.addTransaction(newTx, null, context)
+                    transactionWriter.add(newTx, null, context)
                         .onSuccess {
                             val updated = recurring.copy(lastExecutedDate = todayStr)
                             db.collection("users").document(uid).collection("recurring_transactions")

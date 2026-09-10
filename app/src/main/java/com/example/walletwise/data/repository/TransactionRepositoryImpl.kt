@@ -1,109 +1,90 @@
 package com.example.walletwise.data.repository
 
-import android.content.Context
-import android.net.Uri
-import android.util.Base64
+import com.example.walletwise.data.image.AndroidTransactionWriter
+import com.example.walletwise.data.image.ContentResolverImageReader
+import com.example.walletwise.data.image.ImgBbImageUploader
+import com.example.walletwise.data.mapper.FirestoreSchema
+import com.example.walletwise.data.mapper.FirestoreWireMapper
 import com.example.walletwise.domain.model.Transaction
+import com.example.walletwise.domain.repository.ImageUploader
 import com.example.walletwise.domain.repository.TransactionRepository
+import com.example.walletwise.domain.service.TransactionFallbackPolicy
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
-import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 
 class TransactionRepositoryImpl : TransactionRepository {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    private val client = OkHttpClient()
 
     private val IMGBB_API_KEY = "eba44471019a00974a5ce9624bb366cc"
 
-    override suspend fun addTransaction(transaction: Transaction, localImageUri: Uri?, context: Context): Result<Boolean> {
+    private val imageUploader: ImageUploader by lazy {
+        ImgBbImageUploader(IMGBB_API_KEY)
+    }
+
+    private val androidWriter by lazy {
+        AndroidTransactionWriter(
+            repository = this,
+            imageReader = ContentResolverImageReader(),
+            imageUploader = imageUploader
+        )
+    }
+
+    internal fun androidWriter(): AndroidTransactionWriter = androidWriter
+
+    internal fun imageUploader(): ImageUploader = imageUploader
+
+    override suspend fun addTransaction(transaction: Transaction): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
-            val userTxCollection = db.collection("users").document(userId).collection("transactions")
-            val docRef = userTxCollection.document()
+            val docRef = db.collection(FirestoreSchema.USERS)
+                .document(userId)
+                .collection(FirestoreSchema.TRANSACTIONS)
+                .document()
 
-            var onlineImageUrl = ""
-
-            // Nếu có ảnh, gọi hàm đẩy lên ImgBB
-            if (localImageUri != null) {
-                onlineImageUrl = uploadImageToImgBB(localImageUri, context)
-            }
-
-            // Gắn link online (URL) vào Giao dịch
             val finalTransaction = transaction.copy(
                 id = docRef.id,
-                userId = userId,
-                imageUrl = onlineImageUrl
+                userId = userId
             )
 
-            // Lưu thông tin văn bản + link ảnh vào Firebase Firestore (Database)
-            docRef.set(finalTransaction).await()
-
+            docRef.set(FirestoreWireMapper.transactionToMap(finalTransaction)).await()
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    // Hàm phụ trợ: Mã hóa ảnh và Bắn lên server ImgBB
-    private suspend fun uploadImageToImgBB(uri: Uri, context: Context): String {
-        return withContext(Dispatchers.IO) {
-            try {
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val bytes = inputStream?.readBytes() ?: return@withContext ""
-                inputStream.close()
-
-                val base64Image = Base64.encodeToString(bytes, Base64.DEFAULT)
-
-                val requestBody = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("key", IMGBB_API_KEY)
-                    .addFormDataPart("image", base64Image)
-                    .build()
-
-                val request = Request.Builder()
-                    .url("https://api.imgbb.com/1/upload")
-                    .post(requestBody)
-                    .build()
-
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    if (responseBody != null) {
-                        val jsonObject = JSONObject(responseBody)
-                        // Bóc tách JSON để lấy đường link URL của bức ảnh
-                        return@withContext jsonObject.getJSONObject("data").getString("url")
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            return@withContext ""
-        }
-    }
-
     override suspend fun getTransactions(): Result<List<Transaction>> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
-            val userTxCollection = db.collection("users").document(userId).collection("transactions")
+            val userTxCollection = db.collection(FirestoreSchema.USERS)
+                .document(userId)
+                .collection(FirestoreSchema.TRANSACTIONS)
             val snapshot = userTxCollection.get().await()
-            var transactions = snapshot.toObjects(Transaction::class.java)
+            var transactions = snapshot.documents.map { document ->
+                FirestoreWireMapper.transactionFromMap(
+                    documentId = document.id,
+                    ownerUserId = userId,
+                    data = document.data.orEmpty()
+                )
+            }
 
-            if (transactions.isEmpty()) {
+            if (TransactionFallbackPolicy.shouldLoadLegacy(transactions.size)) {
                 try {
-                    val rootSnapshot = db.collection("TRANSACTIONS")
+                    val rootSnapshot = db.collection(FirestoreSchema.LEGACY_ROOT_TRANSACTIONS)
                         .whereEqualTo("userId", userId)
                         .get()
                         .await()
-                    val rootTransactions = rootSnapshot.toObjects(Transaction::class.java)
+                    val rootTransactions = rootSnapshot.documents.map { document ->
+                        FirestoreWireMapper.transactionFromMap(
+                            documentId = document.id,
+                            ownerUserId = userId,
+                            data = document.data.orEmpty()
+                        )
+                    }
                     if (rootTransactions.isNotEmpty()) {
-                        transactions = rootTransactions
+                        transactions = TransactionFallbackPolicy.select(transactions, rootTransactions)
                     }
                 } catch (_: Exception) {}
             }
@@ -117,9 +98,17 @@ class TransactionRepositoryImpl : TransactionRepository {
     override suspend fun deleteTransaction(transactionId: String): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
-            db.collection("users").document(userId).collection("transactions").document(transactionId).delete().await()
+            db.collection(FirestoreSchema.USERS)
+                .document(userId)
+                .collection(FirestoreSchema.TRANSACTIONS)
+                .document(transactionId)
+                .delete()
+                .await()
             try {
-                db.collection("TRANSACTIONS").document(transactionId).delete().await()
+                db.collection(FirestoreSchema.LEGACY_ROOT_TRANSACTIONS)
+                    .document(transactionId)
+                    .delete()
+                    .await()
             } catch (_: Exception) {}
             Result.success(true)
         } catch (e: Exception) {
@@ -127,42 +116,28 @@ class TransactionRepositoryImpl : TransactionRepository {
         }
     }
 
-    override suspend fun updateTransaction(
-        transaction: Transaction,
-        localImageUri: Uri?,
-        context: Context
-    ): Result<Boolean> {
+    override suspend fun updateTransaction(transaction: Transaction): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
 
-            var imageUrl = transaction.imageUrl
-
-            if (localImageUri != null) {
-                imageUrl = uploadImageToImgBB(localImageUri, context)
-            }
-
-            val updatedTransaction = transaction.copy(
-                imageUrl = imageUrl
-            )
-
-            db.collection("users")
+            db.collection(FirestoreSchema.USERS)
                 .document(userId)
-                .collection("transactions")
+                .collection(FirestoreSchema.TRANSACTIONS)
                 .document(transaction.id)
-                .set(updatedTransaction)
+                .set(FirestoreWireMapper.transactionToMap(transaction))
                 .await()
 
             try {
-                db.collection("TRANSACTIONS")
+                db.collection(FirestoreSchema.LEGACY_ROOT_TRANSACTIONS)
                     .document(transaction.id)
-                    .set(updatedTransaction)
+                    .set(FirestoreWireMapper.transactionToMap(transaction))
                     .await()
             } catch (_: Exception) {}
 
             Result.success(true)
-
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
+
 }

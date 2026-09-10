@@ -56,6 +56,7 @@ import coil.compose.AsyncImage
 import com.example.walletwise.R
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.User
+import com.example.walletwise.presentation.auth.AuthViewModel
 import com.example.walletwise.presentation.profile.ProfileScreen
 import java.text.NumberFormat
 import java.time.Instant
@@ -70,6 +71,7 @@ val primaryBlue = Color(0xFF2196F3)
 @Composable
 fun HomeScreen(
     viewModel: TransactionViewModel,
+    authViewModel: AuthViewModel,
     user: User?,
     onNavigateToAdd: () -> Unit,
     onLogout: () -> Unit
@@ -99,6 +101,11 @@ fun HomeScreen(
     var currentStreak by remember { mutableIntStateOf(user?.currentStreak ?: 0) }
     var lastRecordDate by remember { mutableStateOf(user?.lastRecordDate ?: "") }
 
+    LaunchedEffect(user?.currentStreak, user?.lastRecordDate) {
+        currentStreak = user?.currentStreak ?: 0
+        lastRecordDate = user?.lastRecordDate.orEmpty()
+    }
+
     val context = LocalContext.current
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -116,17 +123,6 @@ fun HomeScreen(
         }
         viewModel.loadTransactions()
         viewModel.initializeScheduledAutomation(context)
-        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (uid != null) {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                if (snapshot != null && snapshot.exists()) {
-                    currentStreak = snapshot.getLong("currentStreak")?.toInt() ?: 0
-                    lastRecordDate = snapshot.getString("lastRecordDate") ?: ""
-                }
-            }
-        }
     }
 
     val todayStr = LocalDate.now(ZoneId.systemDefault()).toString()
@@ -407,7 +403,12 @@ fun HomeScreen(
                 1 -> HistoryScreen(viewModel = viewModel, onDaySelected = { date -> selectedDateFilter = date; selectedTab = 0 })
                 2 -> { /* Thao tác bấm nút '+' đã chuyển thẳng tới onNavigateToAdd() và quay lại Tab 0 */ }
                 3 -> StatisticsScreen(transactions = transactions, formatMoney = formatMoney)
-                4 -> ProfileScreen(viewModel = viewModel, user = user, onLogout = onLogout, onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen })
+                4 -> ProfileScreen(
+                    viewModel = viewModel,
+                    authViewModel = authViewModel,
+                    onLogout = onLogout,
+                    onSubScreenChange = { isOpen -> isSubScreenOpen = isOpen }
+                )
             }
         }
 
