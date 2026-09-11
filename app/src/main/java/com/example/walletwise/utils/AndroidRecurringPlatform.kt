@@ -59,10 +59,9 @@ class AndroidRecurringPlatform(
         if (userId.isBlank() || recurringId.isBlank() || retryAttempt !in 1..MAX_RETRY_ATTEMPTS) {
             return RecurringPlatformScheduleResult.Failure("Yêu cầu retry giao dịch định kỳ không hợp lệ")
         }
-        val delayMinutes = 1L shl (retryAttempt - 1)
         return setAlarm(
             context,
-            System.currentTimeMillis() + delayMinutes * 60_000L,
+            System.currentTimeMillis() + AndroidSchedulingContract.retryDelayMillis(retryAttempt),
             pendingIntent(context, userId, recurringId, retryAttempt)
         )
     }
@@ -138,29 +137,26 @@ class AndroidRecurringPlatform(
         pendingIntent: PendingIntent
     ): RecurringPlatformScheduleResult {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
-        return try {
-            if (canUseExact) {
+        val exactAlarmPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            alarmManager.canScheduleExactAlarms()
+        val canUseExact = AndroidSchedulingContract.shouldUseExactAlarm(
+            sdkInt = Build.VERSION.SDK_INT,
+            exactAlarmPermissionApi = Build.VERSION_CODES.S,
+            canScheduleExactAlarms = exactAlarmPermissionGranted
+        )
+        val outcome = dispatchAlarm(
+            canUseExact = canUseExact,
+            setExact = {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                RecurringPlatformScheduleResult.Scheduled(exact = true)
-            } else {
+            },
+            setInexact = {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                RecurringPlatformScheduleResult.Scheduled(exact = false)
             }
-        } catch (exactError: SecurityException) {
-            runCatching {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            }.fold(
-                onSuccess = { RecurringPlatformScheduleResult.Scheduled(exact = false) },
-                onFailure = {
-                    RecurringPlatformScheduleResult.Failure(
-                        it.message ?: "Không thể đặt lịch giao dịch định kỳ"
-                    )
-                }
+        )
+        return outcome.exact?.let(RecurringPlatformScheduleResult::Scheduled)
+            ?: RecurringPlatformScheduleResult.Failure(
+                outcome.error?.message ?: "Không thể đặt lịch giao dịch định kỳ"
             )
-        } catch (error: Throwable) {
-            RecurringPlatformScheduleResult.Failure(error.message ?: "Không thể đặt lịch giao dịch định kỳ")
-        }
     }
 
     private fun pendingIntent(
@@ -186,14 +182,13 @@ class AndroidRecurringPlatform(
 
         private const val MAX_RETRY_ATTEMPTS = 5
         private const val IMMEDIATE_DELAY_MILLIS = 250L
-        private const val ACTION_RECURRING_ALARM = "com.example.walletwise.action.RECURRING_ALARM"
-
-        fun stableRequestCode(recurringId: String): Int = recurringId.hashCode()
+        fun stableRequestCode(recurringId: String): Int =
+            AndroidSchedulingContract.stableRequestCode(recurringId)
     }
 
     private fun alarmIntent(context: Context, recurringId: String): Intent =
         Intent(context, RecurringTransactionReceiver::class.java).apply {
-            action = ACTION_RECURRING_ALARM
-            data = Uri.parse("walletwise://recurring/${Uri.encode(recurringId)}")
+            action = AndroidSchedulingContract.ACTION_RECURRING_ALARM
+            data = Uri.parse(AndroidSchedulingContract.recurringData(recurringId))
         }
 }

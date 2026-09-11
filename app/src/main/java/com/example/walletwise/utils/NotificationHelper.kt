@@ -40,8 +40,15 @@ object NotificationHelper {
         // POST_NOTIFICATIONS is a runtime permission on Android 13+. A
         // background recurring task must not be allowed to crash the app when
         // the permission has not been granted yet.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        val permissionGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!AndroidSchedulingContract.shouldPostNotification(
+                sdkInt = Build.VERSION.SDK_INT,
+                notificationPermissionApi = Build.VERSION_CODES.TIRAMISU,
+                permissionGranted = permissionGranted
+            )
         ) {
             return
         }

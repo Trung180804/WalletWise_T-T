@@ -19,15 +19,13 @@ import kotlinx.coroutines.launch
 /** Restores reminders and recurring transactions after time/device changes. */
 class RecurringBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action !in SUPPORTED_ACTIONS) return
+        if (!AndroidSchedulingContract.isForceReconcileAction(intent.action)) return
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            try {
+            runBroadcastWork(finish = pendingResult::finish) {
                 restoreRecurringTransactions(context.applicationContext, userId)
                 restoreReminders(context.applicationContext, userId)
-            } finally {
-                pendingResult.finish()
             }
         }
     }
@@ -67,16 +65,4 @@ class RecurringBootReceiver : BroadcastReceiver() {
         }
     }
 
-    private companion object {
-        const val ACTION_EXACT_ALARM_PERMISSION_CHANGED =
-            "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"
-
-        val SUPPORTED_ACTIONS = setOf(
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED,
-            Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED,
-            ACTION_EXACT_ALARM_PERMISSION_CHANGED
-        )
-    }
 }

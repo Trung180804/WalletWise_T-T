@@ -66,6 +66,31 @@ class RecurringAutomationCoordinatorTest {
     }
 
     @Test
+    fun independentCoordinatorsShareTheDurableDuplicateGuardInsteadOfTheirProcessMutex() = runTest {
+        val repository = FakeRecurringRepository()
+        val provider = FakeRecurringDateTimeProvider(dateTime(2026, 9, 5, 8))
+        val platform = FakeRecurringPlatform()
+        val due = rule(timesCount = RECURRING_TIMES_UNLIMITED)
+        repository.rules[due.id] = due
+        val coordinators = List(12) {
+            RecurringAutomationCoordinator(
+                ExecuteRecurringIfDueUseCase(repository, provider),
+                platform,
+                platform,
+                provider
+            )
+        }
+
+        coordinators.map { coordinator ->
+            async { coordinator.process("user", due.id) }
+        }.forEach { it.await() }
+
+        assertEquals(setOf("rule_2026-09-05"), repository.transactionIds)
+        assertEquals("2026-09-05", repository.rules.getValue(due.id).lastExecutedDate)
+        assertEquals(1, platform.notifications.size)
+    }
+
+    @Test
     fun committedWriteWithLostResponseRetriesWithoutCreatingASecondTransaction() = runTest {
         val fixture = fixture(now = dateTime(2026, 9, 5, 8))
         val due = rule()
@@ -94,6 +119,39 @@ class RecurringAutomationCoordinatorTest {
         assertTrue(fixture.repository.transactionIds.isEmpty())
         assertEquals("", fixture.repository.rules.getValue(due.id).lastExecutedDate)
         assertEquals(listOf(Triple("user", "rule", 1)), fixture.platform.retries)
+    }
+
+    @Test
+    fun existingDeterministicTransactionRepairsOldMarkerWithoutNewWriteOrNotification() = runTest {
+        val fixture = fixture(now = dateTime(2026, 9, 5, 8))
+        val due = rule()
+        fixture.repository.rules[due.id] = due
+        fixture.repository.transactionIds += "rule_2026-09-05"
+
+        val outcome = fixture.coordinator.process("user", due.id)
+
+        assertEquals(RecurringProcessingStatus.COMPLETE, outcome.status)
+        assertEquals(false, outcome.execution?.transactionWasCreated)
+        assertEquals(setOf("rule_2026-09-05"), fixture.repository.transactionIds)
+        assertEquals("2026-09-05", fixture.repository.rules.getValue(due.id).lastExecutedDate)
+        assertTrue(fixture.platform.notifications.isEmpty())
+    }
+
+    @Test
+    fun finalFiniteOccurrenceDisablesRuleAndACompletedRetryDoesNotNotifyTwice() = runTest {
+        val fixture = fixture(now = dateTime(2026, 9, 5, 8))
+        val due = rule(timesCount = "1")
+        fixture.repository.rules[due.id] = due
+
+        val first = fixture.coordinator.process("user", due.id)
+        val retry = fixture.coordinator.process("user", due.id, retryAttempt = 1)
+
+        assertEquals(true, first.execution?.transactionWasCreated)
+        assertEquals(false, retry.execution?.transactionWasCreated)
+        assertFalse(fixture.repository.rules.getValue(due.id).isEnabled)
+        assertEquals("2026-09-05", fixture.repository.rules.getValue(due.id).lastExecutedDate)
+        assertEquals(setOf("rule_2026-09-05"), fixture.repository.transactionIds)
+        assertEquals(1, fixture.platform.notifications.size)
     }
 
     @Test

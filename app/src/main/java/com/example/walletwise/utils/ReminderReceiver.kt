@@ -24,39 +24,39 @@ class ReminderReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val repository = ReminderRepositoryImpl()
-                val platform = AndroidReminderPlatform(appContext)
-                val reconcile = ReconcileReminderSchedulingUseCase(
-                    platform,
-                    platform,
-                    AndroidReminderDateTimeProvider()
-                )
-                when (val result = repository.getReminders(userId)) {
-                    is RepositoryResult.Success -> {
-                        val reminder = result.value.firstOrNull { it.id == reminderId }
-                        if (reminder?.isEnabled == true &&
-                            FirebaseAuth.getInstance().currentUser?.uid == userId
-                        ) {
-                            showReminder(appContext, reminder)
-                            reconcile.apply(reminder, force = true)
-                        } else {
-                            platform.cancel(reminderId)
+            runBroadcastWork(finish = pendingResult::finish) {
+                try {
+                    val repository = ReminderRepositoryImpl()
+                    val platform = AndroidReminderPlatform(appContext)
+                    val reconcile = ReconcileReminderSchedulingUseCase(
+                        platform,
+                        platform,
+                        AndroidReminderDateTimeProvider()
+                    )
+                    when (val result = repository.getReminders(userId)) {
+                        is RepositoryResult.Success -> {
+                            val reminder = result.value.firstOrNull { it.id == reminderId }
+                            if (reminder?.isEnabled == true &&
+                                FirebaseAuth.getInstance().currentUser?.uid == userId
+                            ) {
+                                showReminder(appContext, reminder)
+                                reconcile.apply(reminder, force = true)
+                            } else {
+                                platform.cancel(reminderId)
+                            }
+                        }
+                        is RepositoryResult.Failure -> {
+                            // Preserve a future occurrence during a temporary outage,
+                            // but do not display unverified Firestore data.
+                            fallbackReminder(intent, userId, reminderId)?.let {
+                                reconcile.apply(it, force = true)
+                            }
+                            Log.e("REMINDER_RECEIVER", result.error.message)
                         }
                     }
-                    is RepositoryResult.Failure -> {
-                        // Preserve a future occurrence during a temporary outage,
-                        // but do not display unverified Firestore data.
-                        fallbackReminder(intent, userId, reminderId)?.let {
-                            reconcile.apply(it, force = true)
-                        }
-                        Log.e("REMINDER_RECEIVER", result.error.message)
-                    }
+                } catch (error: Throwable) {
+                    Log.e("REMINDER_RECEIVER", "Unable to process reminder $reminderId", error)
                 }
-            } catch (error: Throwable) {
-                Log.e("REMINDER_RECEIVER", "Unable to process reminder $reminderId", error)
-            } finally {
-                pendingResult.finish()
             }
         }
     }

@@ -4,6 +4,11 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+val firebaseEmulatorRequested = providers.environmentVariable("USE_FIREBASE_EMULATOR")
+    .orElse(providers.gradleProperty("useFirebaseEmulator"))
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+
 android {
     namespace = "com.example.walletwise"
     compileSdk {
@@ -21,8 +26,18 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField(
+                "boolean",
+                "USE_FIREBASE_EMULATOR",
+                firebaseEmulatorRequested.get().toString()
+            )
+        }
         release {
             isMinifyEnabled = false
+            // Release never contains an enabled emulator flag, even when the
+            // developer environment requests the checkpoint harness.
+            buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "false")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -35,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

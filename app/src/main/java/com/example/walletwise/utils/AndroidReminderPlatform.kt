@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.example.walletwise.domain.service.ReminderPermission
@@ -51,25 +52,24 @@ class AndroidReminderPlatform(
         val triggerAtMillis = localDateTime.atZone(zoneId).toInstant().toEpochMilli()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = pendingIntent(context, request)
-        val canUseExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
-        return try {
-            if (canUseExact) {
+        val exactAlarmPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            alarmManager.canScheduleExactAlarms()
+        val canUseExact = AndroidSchedulingContract.shouldUseExactAlarm(
+            sdkInt = Build.VERSION.SDK_INT,
+            exactAlarmPermissionApi = Build.VERSION_CODES.S,
+            canScheduleExactAlarms = exactAlarmPermissionGranted
+        )
+        val outcome = dispatchAlarm(
+            canUseExact = canUseExact,
+            setExact = {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                ReminderPlatformScheduleResult.Scheduled(exact = true)
-            } else {
+            },
+            setInexact = {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                ReminderPlatformScheduleResult.Scheduled(exact = false)
             }
-        } catch (exactError: SecurityException) {
-            runCatching {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            }.fold(
-                onSuccess = { ReminderPlatformScheduleResult.Scheduled(exact = false) },
-                onFailure = { ReminderPlatformScheduleResult.Failure(it.message ?: "Không thể đặt lịch nhắc") }
-            )
-        } catch (error: Throwable) {
-            ReminderPlatformScheduleResult.Failure(error.message ?: "Không thể đặt lịch nhắc")
-        }
+        )
+        return outcome.exact?.let(ReminderPlatformScheduleResult::Scheduled)
+            ?: ReminderPlatformScheduleResult.Failure(outcome.error?.message ?: "Không thể đặt lịch nhắc")
     }
 
     override suspend fun cancel(reminderId: String): ReminderPlatformScheduleResult {
@@ -80,7 +80,7 @@ class AndroidReminderPlatform(
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
                 stableRequestCode(reminderId),
-                Intent(context, ReminderReceiver::class.java),
+                alarmIntent(context, reminderId),
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
             if (pendingIntent != null) {
@@ -129,7 +129,7 @@ class AndroidReminderPlatform(
         return PendingIntent.getBroadcast(
             context,
             stableRequestCode(reminder.id),
-            Intent(context, ReminderReceiver::class.java).apply {
+            alarmIntent(context, reminder.id).apply {
                 putExtra(EXTRA_USER_ID, reminder.userId)
                 putExtra(EXTRA_REMINDER_ID, reminder.id)
                 putExtra(EXTRA_TITLE, reminder.title)
@@ -151,6 +151,13 @@ class AndroidReminderPlatform(
         const val EXTRA_START_DATE = "reminder_start_date"
         const val EXTRA_TIME = "reminder_time"
 
-        fun stableRequestCode(reminderId: String): Int = reminderId.hashCode()
+        fun stableRequestCode(reminderId: String): Int =
+            AndroidSchedulingContract.stableRequestCode(reminderId)
     }
+
+    private fun alarmIntent(context: Context, reminderId: String): Intent =
+        Intent(context, ReminderReceiver::class.java).apply {
+            action = AndroidSchedulingContract.ACTION_REMINDER_ALARM
+            data = Uri.parse(AndroidSchedulingContract.reminderData(reminderId))
+        }
 }

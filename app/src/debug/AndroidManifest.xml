@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Firebase Emulator endpoints are local HTTP services. This override is
+         compiled into debug builds only; release keeps the production policy. -->
+    <application android:usesCleartextTraffic="true" />
+
+</manifest>
