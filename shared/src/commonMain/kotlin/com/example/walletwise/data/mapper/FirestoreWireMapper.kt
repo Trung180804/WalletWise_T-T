@@ -5,6 +5,9 @@ import com.example.walletwise.domain.model.BudgetRule
 import com.example.walletwise.domain.model.Category
 import com.example.walletwise.domain.model.RecurringTransaction
 import com.example.walletwise.domain.model.Reminder
+import com.example.walletwise.domain.model.REMINDER_FREQUENCY_DAILY
+import com.example.walletwise.domain.model.RECURRING_FREQUENCY_MONTHLY
+import com.example.walletwise.domain.model.TRANSACTION_TYPE_EXPENSE
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.User
 import com.example.walletwise.domain.model.UserProfileUpdate
@@ -88,7 +91,7 @@ object FirestoreWireMapper {
         id = data.string("id", documentId),
         name = data.string("name"),
         icon = data.string("icon"),
-        type = data.string("type", "Chi"),
+        type = data.string("type", TRANSACTION_TYPE_EXPENSE),
         isCustom = data.boolean("isCustom") ?: false,
         sortOrder = data.int("sortOrder")
     )
@@ -139,7 +142,7 @@ object FirestoreWireMapper {
         id = documentId,
         userId = ownerUserId,
         title = data.string("title"),
-        frequency = data.string("frequency", "Hàng ngày"),
+        frequency = data.string("frequency", REMINDER_FREQUENCY_DAILY),
         startDate = data.string("startDate"),
         time = data.string("time", "20:15"),
         note = data.string("note"),
@@ -169,7 +172,7 @@ object FirestoreWireMapper {
         type = data.string("type", "Chi"),
         category = data.string("category", "Hóa đơn"),
         paymentMethod = data.string("paymentMethod", "Tiền mặt"),
-        frequency = data.string("frequency", "Hàng tháng"),
+        frequency = data.string("frequency", RECURRING_FREQUENCY_MONTHLY),
         timesCount = data.string("timesCount", "1"),
         startDate = data.string("startDate"),
         time = data.string("time", "20:15"),

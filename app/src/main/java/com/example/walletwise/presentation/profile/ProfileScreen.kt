@@ -17,7 +17,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.walletwise.presentation.auth.AuthViewModel
 import com.example.walletwise.presentation.home.TransactionViewModel
-import com.example.walletwise.presentation.profile.settings.AddRecurringView
 import com.example.walletwise.presentation.profile.settings.CategoryManagementView
 import com.example.walletwise.presentation.profile.settings.DefaultCurrencyView
 import com.example.walletwise.presentation.profile.settings.FontSizeView
@@ -88,12 +87,8 @@ fun ProfileScreen(
             ProfileRoute.THEME -> ThemeView { currentRoute = ProfileRoute.SETTINGS }
             ProfileRoute.RECURRING -> RecurringView(
                 viewModel = viewModel,
-                onAdd = { currentRoute = ProfileRoute.ADD_RECURRING },
                 onBack = { currentRoute = ProfileRoute.SETTINGS }
             )
-            ProfileRoute.ADD_RECURRING -> AddRecurringView(viewModel = viewModel) {
-                currentRoute = ProfileRoute.RECURRING
-            }
             ProfileRoute.ABOUT_US -> AboutUsView { currentRoute = ProfileRoute.MAIN }
             ProfileRoute.REMINDERS -> RemindersView(viewModel = viewModel) {
                 currentRoute = ProfileRoute.SETTINGS

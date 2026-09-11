@@ -16,7 +16,6 @@ class ProfileRouteTest {
 
     @Test
     fun backDestination_preservesNestedRouteBehavior() {
-        assertEquals(ProfileRoute.RECURRING, ProfileRoute.ADD_RECURRING.backDestination())
         listOf(
             ProfileRoute.FONT_SIZE,
             ProfileRoute.THEME,

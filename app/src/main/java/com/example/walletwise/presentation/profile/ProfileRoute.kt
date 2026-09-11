@@ -9,7 +9,6 @@ enum class ProfileRoute {
     DEFAULT_CURRENCY,
     THEME,
     RECURRING,
-    ADD_RECURRING,
     ABOUT_US,
     REMINDERS,
     CUSTOMER_CARE,
@@ -21,7 +20,6 @@ internal val ProfileRoute.isSubScreen: Boolean
     get() = this != ProfileRoute.MAIN
 
 internal fun ProfileRoute.backDestination(): ProfileRoute = when (this) {
-    ProfileRoute.ADD_RECURRING -> ProfileRoute.RECURRING
     ProfileRoute.FONT_SIZE,
     ProfileRoute.THEME,
     ProfileRoute.RECURRING,

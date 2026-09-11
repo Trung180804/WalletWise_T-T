@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FirebaseFirestoreException
+import kotlinx.coroutines.TimeoutCancellationException
 
 internal fun Throwable.toRepositoryError(fallbackMessage: String): RepositoryError {
     val code = when (this) {
@@ -15,7 +16,8 @@ internal fun Throwable.toRepositoryError(fallbackMessage: String): RepositoryErr
         is FirebaseAuthInvalidUserException -> RepositoryErrorCode.INVALID_CREDENTIALS
         is FirebaseAuthUserCollisionException -> RepositoryErrorCode.EMAIL_ALREADY_IN_USE
         is FirebaseAuthWeakPasswordException -> RepositoryErrorCode.WEAK_PASSWORD
-        is FirebaseNetworkException -> RepositoryErrorCode.NETWORK
+        is FirebaseNetworkException,
+        is TimeoutCancellationException -> RepositoryErrorCode.NETWORK
         is FirebaseFirestoreException -> when (this.code) {
             FirebaseFirestoreException.Code.PERMISSION_DENIED -> RepositoryErrorCode.PERMISSION_DENIED
             FirebaseFirestoreException.Code.NOT_FOUND -> RepositoryErrorCode.NOT_FOUND

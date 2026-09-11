@@ -3,12 +3,18 @@ package com.example.walletwise.utils
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.example.walletwise.data.repository.ReminderRepositoryImpl
+import com.example.walletwise.data.repository.RecurringTransactionRepositoryImpl
+import com.example.walletwise.data.time.AndroidReminderDateTimeProvider
+import com.example.walletwise.data.time.AndroidRecurringDateTimeProvider
+import com.example.walletwise.domain.result.RepositoryResult
+import com.example.walletwise.domain.service.ReconcileReminderSchedulingUseCase
+import com.example.walletwise.domain.service.RecurringAutomationCoordinator
+import com.example.walletwise.domain.usecase.ExecuteRecurringIfDueUseCase
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 /** Restores reminders and recurring transactions after time/device changes. */
 class RecurringBootReceiver : BroadcastReceiver() {
@@ -27,71 +33,37 @@ class RecurringBootReceiver : BroadcastReceiver() {
     }
 
     private suspend fun restoreRecurringTransactions(context: Context, userId: String) {
-        try {
-            val recurring = FirebaseFirestore.getInstance().collection("users").document(userId)
-                .collection("recurring_transactions").get().await()
-                .documents
-                .map { document ->
-                    SettingsFirestoreMapper.recurringFromMap(
-                        documentId = document.id,
-                        ownerUserId = userId,
-                        data = document.data.orEmpty()
-                    )
-                }
-            recurring.filter { it.isEnabled }.forEach { rule ->
-                try {
-                    val result = RecurringTransactionExecutor.executeIfDue(context, userId, rule.id)
-                    result.recurring?.let { RecurringTransactionScheduler.schedule(context, it) }
-                    if (result.transactionWasCreated) {
-                        NotificationHelper.showNotification(
-                            context,
-                            rule.id.hashCode(),
-                            "WalletWise - Giao dịch định kỳ",
-                            "Đã tự động thêm giao dịch: ${rule.title}"
-                        )
-                    }
-                } catch (error: Exception) {
-                    // Do not permanently lose a due occurrence when Firestore
-                    // is temporarily offline during a boot/time-change event.
-                    RecurringTransactionScheduler.scheduleRetry(
-                        context,
-                        userId,
-                        rule.id,
-                        retryAttempt = 1
-                    )
-                    android.util.Log.e(
-                        "RECURRING_BOOT",
-                        "Unable to reconcile recurring transaction ${rule.id}",
-                        error
-                    )
-                }
+        val repository = RecurringTransactionRepositoryImpl()
+        val dateTimeProvider = AndroidRecurringDateTimeProvider()
+        val platform = AndroidRecurringPlatform(dateTimeProvider, context)
+        val coordinator = RecurringAutomationCoordinator(
+            executeIfDue = ExecuteRecurringIfDueUseCase(repository, dateTimeProvider),
+            scheduler = platform,
+            notifier = platform,
+            dateTimeProvider = dateTimeProvider
+        )
+        when (val result = repository.getRecurringTransactions(userId)) {
+            is RepositoryResult.Success -> {
+                val report = coordinator.reconcile(userId, result.value, forceSchedule = true)
+                report.errors.forEach { android.util.Log.e("RECURRING_BOOT", it) }
             }
-        } catch (error: Exception) {
-            android.util.Log.e("RECURRING_BOOT", "Unable to restore recurring transactions", error)
+            is RepositoryResult.Failure -> android.util.Log.e("RECURRING_BOOT", result.error.message)
         }
     }
 
     private suspend fun restoreReminders(context: Context, userId: String) {
-        try {
-            FirebaseFirestore.getInstance().collection("users").document(userId)
-                .collection("reminders").get().await()
-                .documents
-                .map { document ->
-                    SettingsFirestoreMapper.reminderFromMap(
-                        documentId = document.id,
-                        ownerUserId = userId,
-                        data = document.data.orEmpty()
-                    )
-                }
-                .forEach { reminder ->
-                    if (reminder.isEnabled) {
-                        ReminderScheduler.schedule(context, reminder)
-                    } else {
-                        ReminderScheduler.cancel(context, reminder.id)
-                    }
-                }
-        } catch (error: Exception) {
-            android.util.Log.e("REMINDER_BOOT", "Unable to restore reminders", error)
+        val platform = AndroidReminderPlatform(context)
+        val reconcile = ReconcileReminderSchedulingUseCase(
+            platform,
+            platform,
+            AndroidReminderDateTimeProvider()
+        )
+        when (val result = ReminderRepositoryImpl().getReminders(userId)) {
+            is RepositoryResult.Success -> reconcile.reconcile(userId, result.value, force = true)
+            is RepositoryResult.Failure -> android.util.Log.e(
+                "REMINDER_BOOT",
+                "Unable to restore reminders: ${result.error.message}"
+            )
         }
     }
 

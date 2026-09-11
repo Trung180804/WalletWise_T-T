@@ -2,6 +2,7 @@ package com.example.walletwise.domain.usecase
 
 import com.example.walletwise.domain.model.AddTransactionInput
 import com.example.walletwise.domain.model.ImageUpload
+import com.example.walletwise.domain.model.RecurringTransaction
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.UpdateTransactionInput
 import com.example.walletwise.domain.repository.ImageUploader
@@ -9,6 +10,32 @@ import com.example.walletwise.domain.repository.TransactionRepository
 import com.example.walletwise.domain.validation.TransactionValidator
 
 class TransactionImageUploadException(message: String) : IllegalStateException(message)
+
+/** Builds automatic writes through the same validation contract used by manual transaction adds. */
+class CreateRecurringTransactionWriteUseCase {
+    operator fun invoke(
+        recurring: RecurringTransaction,
+        userId: String,
+        transactionId: String,
+        executedAtEpochMilliseconds: Long
+    ): Result<Transaction> {
+        val transaction = Transaction(
+            id = transactionId,
+            userId = userId,
+            amount = recurring.amount,
+            type = recurring.type,
+            category = recurring.category,
+            paymentMethod = recurring.paymentMethod,
+            note = "[Định kỳ] ${recurring.title}" +
+                if (recurring.note.isBlank()) "" else " - ${recurring.note}",
+            timestamp = executedAtEpochMilliseconds
+        )
+        TransactionValidator.validateForAdd(transaction).exceptionOrNull()?.let {
+            return Result.failure(it)
+        }
+        return Result.success(transaction)
+    }
+}
 
 class AddTransactionUseCase(
     private val repository: TransactionRepository,

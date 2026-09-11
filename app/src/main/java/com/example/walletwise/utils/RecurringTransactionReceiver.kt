@@ -3,6 +3,11 @@ package com.example.walletwise.utils
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.example.walletwise.data.repository.RecurringTransactionRepositoryImpl
+import com.example.walletwise.data.time.AndroidRecurringDateTimeProvider
+import com.example.walletwise.domain.service.RecurringAutomationCoordinator
+import com.example.walletwise.domain.service.RecurringProcessingStatus
+import com.example.walletwise.domain.usecase.ExecuteRecurringIfDueUseCase
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,9 +15,9 @@ import kotlinx.coroutines.launch
 
 class RecurringTransactionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val userId = intent.getStringExtra(RecurringTransactionScheduler.EXTRA_USER_ID).orEmpty()
-        val recurringId = intent.getStringExtra(RecurringTransactionScheduler.EXTRA_RECURRING_ID).orEmpty()
-        val retryAttempt = intent.getIntExtra(RecurringTransactionScheduler.EXTRA_RETRY_ATTEMPT, 0)
+        val userId = intent.getStringExtra(AndroidRecurringPlatform.EXTRA_USER_ID).orEmpty()
+        val recurringId = intent.getStringExtra(AndroidRecurringPlatform.EXTRA_RECURRING_ID).orEmpty()
+        val retryAttempt = intent.getIntExtra(AndroidRecurringPlatform.EXTRA_RETRY_ATTEMPT, 0)
         if (userId.isBlank() || recurringId.isBlank()) return
 
         val pendingResult = goAsync()
@@ -22,25 +27,26 @@ class RecurringTransactionReceiver : BroadcastReceiver() {
                 // write into that account after someone else signs in.
                 if (FirebaseAuth.getInstance().currentUser?.uid != userId) return@launch
 
-                val result = RecurringTransactionExecutor.executeIfDue(context.applicationContext, userId, recurringId)
-                result.recurring?.let { RecurringTransactionScheduler.schedule(context.applicationContext, it) }
-                if (result.transactionWasCreated) {
-                    NotificationHelper.showNotification(
-                        context.applicationContext,
-                        recurringId.hashCode(),
-                        "WalletWise - Giao dịch định kỳ",
-                        "Đã tự động thêm giao dịch: ${result.recurring?.title.orEmpty()}"
+                val repository = RecurringTransactionRepositoryImpl()
+                val dateTimeProvider = AndroidRecurringDateTimeProvider()
+                val platform = AndroidRecurringPlatform(dateTimeProvider, context.applicationContext)
+                val coordinator = RecurringAutomationCoordinator(
+                    executeIfDue = ExecuteRecurringIfDueUseCase(repository, dateTimeProvider),
+                    scheduler = platform,
+                    notifier = platform,
+                    dateTimeProvider = dateTimeProvider
+                )
+                val outcome = coordinator.process(userId, recurringId, retryAttempt)
+                if (outcome.status == RecurringProcessingStatus.FAILED) {
+                    android.util.Log.e(
+                        "RECURRING_RECEIVER",
+                        outcome.repositoryError?.message ?: outcome.schedulingError ?: "Recurring processing failed"
                     )
                 }
+                outcome.notificationError?.let {
+                    android.util.Log.w("RECURRING_RECEIVER", it)
+                }
             } catch (error: Exception) {
-                // Do not lose this occurrence when the phone is temporarily
-                // offline. Retry after 1, 2, 4, 8 and 16 minutes.
-                RecurringTransactionScheduler.scheduleRetry(
-                    context.applicationContext,
-                    userId,
-                    recurringId,
-                    retryAttempt + 1
-                )
                 android.util.Log.e("RECURRING_RECEIVER", "Unable to run recurring transaction", error)
             } finally {
                 pendingResult.finish()

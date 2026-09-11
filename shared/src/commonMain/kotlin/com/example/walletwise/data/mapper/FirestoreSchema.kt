@@ -29,8 +29,14 @@ object FirestoreSchema {
     fun remindersCollection(userId: String): String =
         "${userDocument(userId)}/$REMINDERS"
 
+    fun reminderDocument(userId: String, reminderId: String): String =
+        "${remindersCollection(userId)}/$reminderId"
+
     fun recurringTransactionsCollection(userId: String): String =
         "${userDocument(userId)}/$RECURRING_TRANSACTIONS"
+
+    fun recurringTransactionDocument(userId: String, recurringId: String): String =
+        "${recurringTransactionsCollection(userId)}/$recurringId"
 
     fun categoriesCollection(userId: String): String =
         "${userDocument(userId)}/$CATEGORIES"
