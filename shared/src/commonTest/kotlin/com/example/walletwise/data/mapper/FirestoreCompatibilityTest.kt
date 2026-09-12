@@ -110,6 +110,61 @@ class FirestoreCompatibilityTest {
     }
 
     @Test
+    fun transactionAmount_acceptsLongAndDoubleWithoutChangingWireType() {
+        val fromLong = FirestoreWireMapper.transactionFromMap(
+            "long-amount",
+            "user-1",
+            mapOf("amount" to 125_000L, "timestamp" to 10L)
+        )
+        val fromDouble = FirestoreWireMapper.transactionFromMap(
+            "double-amount",
+            "user-1",
+            mapOf("amount" to 125_000.5, "timestamp" to 11L)
+        )
+
+        assertEquals(125_000.0, fromLong.amount)
+        assertEquals(125_000.5, fromDouble.amount)
+        assertIs<Double>(FirestoreWireMapper.transactionToMap(fromLong)["amount"])
+        assertIs<Double>(FirestoreWireMapper.transactionToMap(fromDouble)["amount"])
+    }
+
+    @Test
+    fun legacyFirestoreTimestamp_isConvertedToEpochMilliseconds() {
+        val transaction = FirestoreWireMapper.transactionFromMap(
+            "timestamp-1",
+            "user-1",
+            mapOf(
+                "timestamp" to FirestoreTimestampValue(
+                    seconds = 1_725_840_000L,
+                    nanoseconds = 456_000_000
+                )
+            )
+        )
+
+        assertEquals(1_725_840_000_456L, transaction.timestamp)
+    }
+
+    @Test
+    fun missingOptionalFields_andMalformedTimestamp_useSafeDefaults() {
+        val transaction = FirestoreWireMapper.transactionFromMap(
+            documentId = "document-id",
+            ownerUserId = "user-1",
+            data = mapOf(
+                "amount" to 10L,
+                "timestamp" to FirestoreTimestampValue(Long.MAX_VALUE, -1)
+            )
+        )
+
+        assertEquals("document-id", transaction.id)
+        assertEquals("user-1", transaction.userId)
+        assertEquals("", transaction.type)
+        assertEquals("", transaction.category)
+        assertEquals("", transaction.note)
+        assertEquals("", transaction.imageUrl)
+        assertEquals(0L, transaction.timestamp)
+    }
+
+    @Test
     fun legacyRootTransactionWithoutPayloadId_usesDocumentIdAndOwner() {
         val legacy = mapOf<String, Any?>(
             "userId" to "user-1",

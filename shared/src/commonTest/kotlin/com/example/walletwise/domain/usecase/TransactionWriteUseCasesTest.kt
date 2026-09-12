@@ -6,6 +6,9 @@ import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.UpdateTransactionInput
 import com.example.walletwise.domain.repository.ImageUploader
 import com.example.walletwise.domain.repository.TransactionRepository
+import com.example.walletwise.domain.result.RepositoryResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
@@ -166,6 +169,9 @@ private class RecordingImageUploader(
 private class RecordingTransactionRepository : TransactionRepository {
     var added: Transaction? = null
     var updated: Transaction? = null
+
+    override fun observeTransactions(userId: String): Flow<RepositoryResult<List<Transaction>>> =
+        flowOf(RepositoryResult.Success(emptyList()))
 
     override suspend fun addTransaction(transaction: Transaction): Result<Boolean> {
         added = transaction

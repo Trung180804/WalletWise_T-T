@@ -17,8 +17,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,19 +40,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-import coil.compose.AsyncImage
 import com.example.walletwise.R
-import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.User
 import com.example.walletwise.presentation.auth.AuthViewModel
 import com.example.walletwise.presentation.profile.ProfileScreen
@@ -64,7 +57,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import androidx.compose.foundation.lazy.items as lazyItems
-import androidx.compose.foundation.lazy.grid.items as gridItems
 
 val primaryBlue = Color(0xFF2196F3)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -237,6 +229,19 @@ fun HomeScreen(
             when (selectedTab) {
                 0 -> {
                     val today = LocalDate.now(ZoneId.systemDefault())
+                    LaunchedEffect(selectedFilter, selectedDateFilter, today) {
+                        val firstDate = selectedDateFilter ?: today.minusDays(2)
+                        val lastDate = selectedDateFilter ?: today
+                        val zoneId = ZoneId.systemDefault()
+                        viewModel.updateTransactionListFilters(
+                            paymentMethod = selectedFilter.takeUnless { it == filters.first() },
+                            startEpochMilliseconds = firstDate.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                            endEpochMilliseconds = lastDate.plusDays(1)
+                                .atStartOfDay(zoneId)
+                                .toInstant()
+                                .toEpochMilli() - 1L
+                        )
+                    }
 
                     val transactionsToday = transactions.filter { trans ->
                         val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -254,20 +259,6 @@ fun HomeScreen(
                     val totalBalanceAll = transactions.sumOf { trans ->
                         if (trans.type.trim().equals("Thu", ignoreCase = true)) trans.amount else -trans.amount
                     }
-
-                    val displayedTransactions = transactions.filter { trans ->
-                        val matchMethod = selectedFilter == "Tất cả" || trans.paymentMethod == selectedFilter
-                        val txDate = Instant.ofEpochMilli(trans.timestamp).atZone(ZoneId.systemDefault()).toLocalDate()
-
-                        val matchDate = if (selectedDateFilter != null) {
-                            txDate == selectedDateFilter
-                        } else {
-                            val threeDaysAgo = today.minusDays(2)
-                            !txDate.isBefore(threeDaysAgo) && !txDate.isAfter(today)
-                        }
-
-                        matchMethod && matchDate
-                    }.sortedByDescending { it.timestamp }
 
                     /*
                     / 1. TÍNH TOÁN HEADER: Lọc ra các giao dịch TRONG THÁNG NÀY
@@ -371,30 +362,11 @@ fun HomeScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                if (displayedTransactions.isEmpty()) {
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text(text = "Không có giao dịch nào.", color = subTextColor)
-                                    }
-                                } else {
-                                    LazyVerticalGrid(
-                                        columns = GridCells.Fixed(2),
-                                        contentPadding = PaddingValues(bottom = 100.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        gridItems(items = displayedTransactions) { trans ->
-                                            TransactionGridItem(
-                                                transaction = trans,
-                                                formatMoney = formatMoney,
-                                                cardColor = cardColor,
-                                                textColor = textColor,
-                                                subTextColor = subTextColor,
-                                                onEdit = { viewModel.transactionToEdit = trans; onNavigateToAdd() },
-                                                onDelete = { viewModel.deleteTransaction(trans.id) }
-                                            )
-                                        }
-                                    }
-                                }
+                                AndroidTransactionList(
+                                    viewModel = viewModel,
+                                    onNavigateToAdd = onNavigateToAdd,
+                                    modifier = Modifier.fillMaxSize()
+                                )
                             }
                         }
                     }
@@ -536,136 +508,5 @@ fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
 fun BottomBarItem(icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
     Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(if (isSelected) Color(0xFFFFD700) else Color.Transparent).clickable { onClick() }, contentAlignment = Alignment.Center) {
         Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-    }
-}
-
-@Composable
-fun TransactionGridItem(
-    transaction: Transaction,
-    formatMoney: NumberFormat,
-    cardColor: Color,
-    textColor: Color,
-    subTextColor: Color,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val isIncome = transaction.type.trim().equals("Thu", ignoreCase = true)
-    val sign = if (isIncome) "+" else "-"
-    val amountColor = if (isIncome) Color(0xFF4CAF50) else textColor
-    val imgBgColor = MaterialTheme.colorScheme.surfaceVariant
-
-    val sdfTime = java.text.SimpleDateFormat("HH:mm", Locale.forLanguageTag("vi-VN"))
-    val timeString = sdfTime.format(java.util.Date(transaction.timestamp))
-    val sdfFullDate = java.text.SimpleDateFormat("dd/MM/yyyy - HH:mm", Locale.forLanguageTag("vi-VN"))
-    val fullDateString = sdfFullDate.format(java.util.Date(transaction.timestamp))
-
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showDetailsDialog by remember { mutableStateOf(false) }
-
-    Card(modifier = Modifier.fillMaxWidth().clickable { showDetailsDialog = true }, colors = CardDefaults.cardColors(containerColor = cardColor), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Box(modifier = Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(imgBgColor), contentAlignment = Alignment.Center) {
-                if (transaction.imageUrl.isNotEmpty()) {
-                    AsyncImage(model = transaction.imageUrl, contentDescription = "Ảnh", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else { Text(text = "Không có ảnh", fontSize = 10.sp, color = subTextColor) }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "$sign${formatMoney.format(transaction.amount)}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = amountColor)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = transaction.category, fontSize = 12.sp, color = subTextColor, maxLines = 1)
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(text = timeString, fontSize = 11.sp, color = subTextColor)
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
-                    Text(text = transaction.paymentMethod, fontSize = 10.sp, color = subTextColor, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                }
-            }
-        }
-    }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false }, containerColor = cardColor,
-            title = { Text(text = "Xác nhận xóa", fontWeight = FontWeight.Bold, color = textColor) },
-            text = { Text(text = "Bạn có chắc chắn muốn xóa giao dịch này không?", color = textColor, fontSize = 16.sp) },
-            confirmButton = { Button(onClick = { showDeleteDialog = false; onDelete() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))) { Text(text = "Xóa", color = Color.White, fontWeight = FontWeight.Bold) } },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text(text = "Hủy", color = subTextColor, fontWeight = FontWeight.Bold) } }
-        )
-    }
-
-    if (showDetailsDialog) {
-        Dialog(onDismissRequest = { showDetailsDialog = false }) {
-            Surface(shape = RoundedCornerShape(24.dp), color = cardColor, modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Chi tiết", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
-                        IconButton(onClick = { showDetailsDialog = false }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Clear, contentDescription = "Đóng", tint = subTextColor) }
-                    }
-                    Spacer(modifier = Modifier.height(20.dp))
-                    if (transaction.imageUrl.isNotEmpty()) {
-                        AsyncImage(model = transaction.imageUrl, contentDescription = "Hóa đơn", modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
-                        Spacer(modifier = Modifier.height(20.dp))
-                    }
-                    Text(text = "$sign${formatMoney.format(transaction.amount)}", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = amountColor)
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)).padding(16.dp)) {
-                        @Composable
-                        fun InfoRow(label: String, value: String, valueColor: Color = textColor) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = label, color = subTextColor, fontSize = 14.sp)
-                                Text(text = value, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
-                            }
-                        }
-                        InfoRow("Loại giao dịch", transaction.type, amountColor)
-                        InfoRow("Danh mục", transaction.category)
-                        InfoRow("Nguồn tiền", transaction.paymentMethod)
-                        InfoRow("Thời gian", fullDateString)
-                        if (transaction.note.isNotBlank()) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(text = "Ghi chú:", color = subTextColor, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(text = transaction.note, color = textColor, fontSize = 14.sp)
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                showDetailsDialog = false
-                                showDeleteDialog = true
-                            },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
-                            border = BorderStroke(1.dp, Color.Red),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Xóa", fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = {
-                                showDetailsDialog = false
-                                onEdit()
-                            },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = primaryBlue),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Sửa", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
     }
 }

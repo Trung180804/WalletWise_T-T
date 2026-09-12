@@ -11,7 +11,6 @@ import com.example.walletwise.domain.model.TRANSACTION_TYPE_EXPENSE
 import com.example.walletwise.domain.model.Transaction
 import com.example.walletwise.domain.model.User
 import com.example.walletwise.domain.model.UserProfileUpdate
-import com.example.walletwise.foundation.currentEpochMilliseconds
 
 /**
  * Pure Kotlin mapping at the Firestore boundary.
@@ -71,7 +70,7 @@ object FirestoreWireMapper {
         amount = data.double("amount"),
         category = data.string("category"),
         note = data.string("note"),
-        timestamp = data.longOrNull("timestamp") ?: currentEpochMilliseconds(),
+        timestamp = data.transactionTimestampOrNull("timestamp") ?: INVALID_TRANSACTION_TIMESTAMP,
         imageUrl = data.string("imageUrl")
     )
 
@@ -217,6 +216,13 @@ object FirestoreWireMapper {
     private fun Map<String, Any?>.longOrNull(key: String): Long? =
         (this[key] as? Number)?.toLong()
 
+    private fun Map<String, Any?>.transactionTimestampOrNull(key: String): Long? =
+        when (val value = this[key]) {
+            is Number -> value.toLong()
+            is FirestoreTimestampValue -> value.toEpochMillisecondsOrNull()
+            else -> null
+        }
+
     private fun Map<String, Any?>.enabledValue(): Boolean =
         boolean(ENABLED) ?: boolean(IS_ENABLED) ?: true
 
@@ -227,4 +233,21 @@ object FirestoreWireMapper {
             is String -> value.toBooleanStrictOrNull()
             else -> null
         }
+
+    private const val INVALID_TRANSACTION_TIMESTAMP = 0L
+}
+
+/** Platform-neutral form of a legacy Firestore Timestamp read by a Firebase adapter. */
+data class FirestoreTimestampValue(
+    val seconds: Long,
+    val nanoseconds: Int
+) {
+    fun toEpochMillisecondsOrNull(): Long? {
+        if (nanoseconds !in 0..999_999_999) return null
+        if (seconds < Long.MIN_VALUE / 1_000L || seconds > Long.MAX_VALUE / 1_000L) return null
+        val base = seconds * 1_000L
+        val adjustment = nanoseconds / 1_000_000L
+        if (base > Long.MAX_VALUE - adjustment) return null
+        return base + adjustment
+    }
 }

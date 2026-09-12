@@ -17,6 +17,7 @@ import com.example.walletwise.data.repository.TransactionRepositoryImpl
 import com.example.walletwise.data.time.AndroidBudgetDateProvider
 import com.example.walletwise.data.time.AndroidReminderDateTimeProvider
 import com.example.walletwise.data.time.AndroidRecurringDateTimeProvider
+import com.example.walletwise.data.time.AndroidTransactionDateTimeProvider
 import com.example.walletwise.domain.model.Category
 import com.example.walletwise.domain.model.DefaultCategories
 import com.example.walletwise.domain.model.RecurringTransaction
@@ -40,6 +41,13 @@ import com.example.walletwise.presentation.reminder.ReminderSessionController
 import com.example.walletwise.presentation.reminder.ReminderUiPresenter
 import com.example.walletwise.presentation.recurring.RecurringSessionController
 import com.example.walletwise.presentation.recurring.RecurringUiPresenter
+import com.example.walletwise.presentation.transaction.TransactionDateRange
+import com.example.walletwise.presentation.transaction.TransactionDateTimeProvider
+import com.example.walletwise.presentation.transaction.TransactionListFilterState
+import com.example.walletwise.presentation.transaction.TransactionListPresenter
+import com.example.walletwise.presentation.transaction.TransactionListSortOrder
+import com.example.walletwise.presentation.transaction.TransactionSessionController
+import com.example.walletwise.presentation.transaction.TransactionTypeFilter
 import com.example.walletwise.utils.AndroidReminderPlatform
 import com.example.walletwise.utils.AndroidRecurringPlatform
 import com.google.firebase.auth.FirebaseAuth
@@ -69,7 +77,8 @@ class TransactionViewModel(
     private val budgetRepository: BudgetPlanRepository = BudgetPlanRepositoryImpl(),
     private val budgetDateProvider: BudgetDateProvider = AndroidBudgetDateProvider(),
     private val reminderRepository: ReminderRepository = ReminderRepositoryImpl(),
-    private val recurringRepository: RecurringTransactionRepository = RecurringTransactionRepositoryImpl()
+    private val recurringRepository: RecurringTransactionRepository = RecurringTransactionRepositoryImpl(),
+    transactionDateTimeProvider: TransactionDateTimeProvider = AndroidTransactionDateTimeProvider()
 ) : ViewModel() {
 
     private val transactionWriter = transactionWriter
@@ -79,9 +88,16 @@ class TransactionViewModel(
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
-    // Danh sách giao dịch
-    private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
-    val transactions: StateFlow<List<Transaction>> = _transactions.asStateFlow()
+    // Shared read boundary; keep this facade for Android screens not migrated yet.
+    private val transactionSessionController = TransactionSessionController(viewModelScope, repository)
+    val transactionSessionState = transactionSessionController.state
+    val transactions: StateFlow<List<Transaction>> = transactionSessionController.transactions
+    private val transactionListPresenter = TransactionListPresenter(
+        scope = viewModelScope,
+        sessionState = transactionSessionState,
+        dateTimeProvider = transactionDateTimeProvider
+    )
+    val transactionListState = transactionListPresenter.state
 
     private val _userProfile = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
     val userProfile: StateFlow<com.example.walletwise.domain.model.User?> = _userProfile.asStateFlow()
@@ -146,7 +162,6 @@ class TransactionViewModel(
 
     // Keep one listener per source. Re-registering these on every auth update
     // causes duplicate background work and can amplify a Firebase failure.
-    private var transactionsListener: ListenerRegistration? = null
     private var profileListener: ListenerRegistration? = null
     private var authStateListener: AuthStateListener? = null
 
@@ -182,6 +197,7 @@ class TransactionViewModel(
                 fetchRecurringTransactions()
                 refreshBudgetSession()
             } else {
+                transactionSessionController.setUserId(null)
                 categorySessionController.setUserId(null)
                 budgetSessionController.setSession(null, "")
                 reminderSessionController.setUserId(null)
@@ -346,35 +362,47 @@ class TransactionViewModel(
     }
 
     fun loadTransactions() {
-        viewModelScope.launch {
-            repository.getTransactions()
-                .onSuccess { list ->
-                    _transactions.value = list.sortedByDescending { it.timestamp }
-                }
-        }
-        listenToTransactions()
+        transactionSessionController.setUserId(auth.currentUser?.uid)
     }
 
+    /** Compatibility facade retained until all Android call sites move to the shared session. */
     fun listenToTransactions() {
-        val uid = auth.currentUser?.uid ?: return
-        transactionsListener?.remove()
-        transactionsListener = db.collection("users").document(uid).collection("transactions")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("FIRESTORE_ERROR", "Unable to listen to transactions", error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val list = snapshot.documents.mapNotNull { document ->
-                        runCatching { document.toObject(Transaction::class.java) }
-                            .onFailure {
-                                Log.e("FIRESTORE_ERROR", "Skipping invalid transaction ${document.id}", it)
-                            }
-                            .getOrNull()
-                    }
-                    _transactions.value = list.sortedByDescending { it.timestamp }
-                }
-            }
+        loadTransactions()
+    }
+
+    fun updateTransactionListFilters(
+        paymentMethod: String?,
+        startEpochMilliseconds: Long?,
+        endEpochMilliseconds: Long?,
+        type: TransactionTypeFilter = TransactionTypeFilter.ALL
+    ) {
+        transactionListPresenter.updateFilters(
+            TransactionListFilterState(
+                type = type,
+                paymentMethod = paymentMethod?.takeIf(String::isNotBlank),
+                dateRange = if (startEpochMilliseconds != null && endEpochMilliseconds != null) {
+                    TransactionDateRange(startEpochMilliseconds, endEpochMilliseconds)
+                } else {
+                    null
+                },
+                sortOrder = TransactionListSortOrder.NEWEST_FIRST
+            )
+        )
+    }
+
+    fun refreshTransactionList() = transactionSessionController.refresh()
+
+    fun onTransactionRowSelected(transactionId: String) =
+        transactionListPresenter.onRowSelected(transactionId)
+
+    fun onTransactionEditRequested(transactionId: String) =
+        transactionListPresenter.onEditRequested(transactionId)
+
+    fun onTransactionDeleteRequested(transactionId: String) =
+        transactionListPresenter.onDeleteRequested(transactionId)
+
+    fun consumeTransactionListEvent(eventId: Long) {
+        transactionListPresenter.consumeEvent(eventId)
     }
 
     fun refreshBudgetSession() {
@@ -489,10 +517,14 @@ class TransactionViewModel(
     }
 
     fun deleteTransaction(transactionId: String) {
+        if (transactionId.isBlank()) return
         viewModelScope.launch {
             repository.deleteTransaction(transactionId)
-                .onSuccess {
-                    loadTransactions()
+                .onSuccess { deleted ->
+                    if (deleted) loadTransactions()
+                }
+                .onFailure {
+                    Log.e("DELETE_TRANSACTION", "Delete failed")
                 }
         }
     }
@@ -603,8 +635,9 @@ class TransactionViewModel(
     }
 
     override fun onCleared() {
-        transactionsListener?.remove()
         profileListener?.remove()
+        transactionListPresenter.close()
+        transactionSessionController.close()
         categorySessionController.close()
         budgetSessionController.close()
         reminderSessionController.close()
