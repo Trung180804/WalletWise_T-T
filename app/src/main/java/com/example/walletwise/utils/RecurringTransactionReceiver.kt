@@ -3,6 +3,8 @@ package com.example.walletwise.utils
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
+import com.example.walletwise.BuildConfig
 import com.example.walletwise.data.repository.RecurringTransactionRepositoryImpl
 import com.example.walletwise.data.time.AndroidRecurringDateTimeProvider
 import com.example.walletwise.domain.service.RecurringAutomationCoordinator
@@ -38,19 +40,31 @@ class RecurringTransactionReceiver : BroadcastReceiver() {
                         dateTimeProvider = dateTimeProvider
                     )
                     val outcome = coordinator.process(userId, recurringId, retryAttempt)
-                    if (outcome.status == RecurringProcessingStatus.FAILED) {
-                        android.util.Log.e(
-                            "RECURRING_RECEIVER",
-                            outcome.repositoryError?.message ?: outcome.schedulingError ?: "Recurring processing failed"
+                    if (BuildConfig.DEBUG) {
+                        Log.i(
+                            LOG_TAG,
+                            "retry=$retryAttempt status=${outcome.status} " +
+                                "created=${outcome.execution?.transactionWasCreated == true}"
                         )
                     }
-                    outcome.notificationError?.let {
-                        android.util.Log.w("RECURRING_RECEIVER", it)
+                    if (outcome.status == RecurringProcessingStatus.FAILED) {
+                        Log.e(
+                            LOG_TAG,
+                            "Processing failed repositoryCode=${outcome.repositoryError?.code} " +
+                                "schedulingFailure=${outcome.schedulingError != null}"
+                        )
                     }
-                } catch (error: Exception) {
-                    android.util.Log.e("RECURRING_RECEIVER", "Unable to run recurring transaction", error)
+                    if (outcome.notificationError != null) {
+                        Log.w(LOG_TAG, "Notification failed after transaction processing")
+                    }
+                } catch (_: Exception) {
+                    Log.e(LOG_TAG, "Unable to run recurring transaction")
                 }
             }
         }
+    }
+
+    private companion object {
+        const val LOG_TAG = "RECURRING_RECEIVER"
     }
 }

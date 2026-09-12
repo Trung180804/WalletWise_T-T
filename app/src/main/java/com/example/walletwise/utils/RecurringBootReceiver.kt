@@ -3,6 +3,8 @@ package com.example.walletwise.utils
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
+import com.example.walletwise.BuildConfig
 import com.example.walletwise.data.repository.ReminderRepositoryImpl
 import com.example.walletwise.data.repository.RecurringTransactionRepositoryImpl
 import com.example.walletwise.data.time.AndroidReminderDateTimeProvider
@@ -21,11 +23,13 @@ class RecurringBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!AndroidSchedulingContract.isForceReconcileAction(intent.action)) return
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        if (BuildConfig.DEBUG) Log.i(LOG_TAG, "Recovery reconcile started action=${intent.action}")
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             runBroadcastWork(finish = pendingResult::finish) {
                 restoreRecurringTransactions(context.applicationContext, userId)
                 restoreReminders(context.applicationContext, userId)
+                if (BuildConfig.DEBUG) Log.i(LOG_TAG, "Recovery reconcile completed action=${intent.action}")
             }
         }
     }
@@ -43,9 +47,14 @@ class RecurringBootReceiver : BroadcastReceiver() {
         when (val result = repository.getRecurringTransactions(userId)) {
             is RepositoryResult.Success -> {
                 val report = coordinator.reconcile(userId, result.value, forceSchedule = true)
-                report.errors.forEach { android.util.Log.e("RECURRING_BOOT", it) }
+                if (report.errors.isNotEmpty()) {
+                    Log.e("RECURRING_BOOT", "Recurring recovery failures=${report.errors.size}")
+                }
             }
-            is RepositoryResult.Failure -> android.util.Log.e("RECURRING_BOOT", result.error.message)
+            is RepositoryResult.Failure -> Log.e(
+                "RECURRING_BOOT",
+                "Recurring recovery repositoryCode=${result.error.code}"
+            )
         }
     }
 
@@ -58,11 +67,14 @@ class RecurringBootReceiver : BroadcastReceiver() {
         )
         when (val result = ReminderRepositoryImpl().getReminders(userId)) {
             is RepositoryResult.Success -> reconcile.reconcile(userId, result.value, force = true)
-            is RepositoryResult.Failure -> android.util.Log.e(
+            is RepositoryResult.Failure -> Log.e(
                 "REMINDER_BOOT",
-                "Unable to restore reminders: ${result.error.message}"
+                "Reminder recovery repositoryCode=${result.error.code}"
             )
         }
     }
 
+    private companion object {
+        const val LOG_TAG = "RUNTIME_RECOVERY"
+    }
 }

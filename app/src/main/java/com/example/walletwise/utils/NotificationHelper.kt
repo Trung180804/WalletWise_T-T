@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.example.walletwise.BuildConfig
 import com.example.walletwise.MainActivity
 import com.example.walletwise.R
 
@@ -75,8 +76,9 @@ object NotificationHelper {
         try {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(id, builder.build())
-        } catch (error: SecurityException) {
-            Log.w("NOTIFICATION", "Notification permission was not granted", error)
+            if (BuildConfig.DEBUG) Log.i("NOTIFICATION", "Posted notification")
+        } catch (_: SecurityException) {
+            Log.w("NOTIFICATION", "Notification permission was not granted")
         }
     }
 }

@@ -54,8 +54,8 @@ import org.junit.runners.MethodSorters
 
 /**
  * Real Firebase SDK integration tests. They are skipped unless the debug APK
- * was built with USE_FIREBASE_EMULATOR=true and never initialize the default
- * Firebase app from google-services.json.
+ * was built with USE_FIREBASE_EMULATOR=true. The suite uses its own named app;
+ * the debug provider also guarantees that any default app is the demo project.
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class FirebaseReminderRecurringEmulatorTest {

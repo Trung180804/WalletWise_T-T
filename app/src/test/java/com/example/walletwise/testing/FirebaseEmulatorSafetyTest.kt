@@ -1,5 +1,6 @@
 package com.example.walletwise.testing
 
+import com.example.walletwise.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -7,6 +8,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FirebaseEmulatorSafetyTest {
+    @Test
+    fun `ordinary debug unit tests keep the emulator bootstrap disabled by default`() {
+        assertTrue(BuildConfig.DEBUG)
+        assertFalse(BuildConfig.USE_FIREBASE_EMULATOR)
+    }
+
     @Test
     fun `modern Google Play AVD is recognized by ranchu and sdk product properties`() {
         assertTrue(
