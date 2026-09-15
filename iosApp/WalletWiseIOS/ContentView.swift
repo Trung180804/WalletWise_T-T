@@ -1,16 +1,20 @@
 import SwiftUI
+import UIKit
+import WalletWiseShared
 
 struct ContentView: View {
     var body: some View {
-        VStack(spacing: 12) {
-            Text("WalletWise")
-                .font(.title.bold())
-            Text("Khung iOS đã sẵn sàng để tích hợp Compose Multiplatform.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-        }
-        .padding(24)
+        ComposeAuthView()
+            .ignoresSafeArea()
     }
+}
+
+private struct ComposeAuthView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController {
+        WalletWiseComposeViewControllerKt.walletWiseComposeViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
 #Preview {
