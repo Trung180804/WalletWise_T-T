@@ -14,6 +14,10 @@
 		A10000000000000000000005 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000001 /* FirebaseCore */; };
 		A10000000000000000000006 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000002 /* FirebaseAuth */; };
 		A10000000000000000000007 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000003 /* FirebaseFirestore */; };
+		A10000000000000000000008 /* AuthEmulatorPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AuthEmulatorPolicy.swift */; };
+		A10000000000000000000009 /* AuthBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AuthBootstrap.swift */; };
+		A1000000000000000000000A /* FirebaseAuthAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* FirebaseAuthAdapter.swift */; };
+		A1000000000000000000000B /* AuthEmulatorIntegrationProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +27,10 @@
 		A20000000000000000000004 /* WalletWiseIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WalletWiseIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000005 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		A20000000000000000000007 /* AuthEmulatorPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEmulatorPolicy.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* AuthBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthBootstrap.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* FirebaseAuthAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseAuthAdapter.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEmulatorIntegrationProbe.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +63,10 @@
 				A20000000000000000000003 /* Info.plist */,
 				A20000000000000000000005 /* AppDelegate.swift */,
 				A20000000000000000000006 /* GoogleService-Info.plist */,
+				A20000000000000000000007 /* AuthEmulatorPolicy.swift */,
+				A20000000000000000000008 /* AuthBootstrap.swift */,
+				A20000000000000000000009 /* FirebaseAuthAdapter.swift */,
+				A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */,
 			);
 			path = WalletWiseIOS;
 			sourceTree = "<group>";
@@ -166,6 +178,10 @@
 				A10000000000000000000001 /* WalletWiseIOSApp.swift in Sources */,
 				A10000000000000000000002 /* ContentView.swift in Sources */,
 				A10000000000000000000003 /* AppDelegate.swift in Sources */,
+				A10000000000000000000008 /* AuthEmulatorPolicy.swift in Sources */,
+				A10000000000000000000009 /* AuthBootstrap.swift in Sources */,
+				A1000000000000000000000A /* FirebaseAuthAdapter.swift in Sources */,
+				A1000000000000000000000B /* AuthEmulatorIntegrationProbe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
