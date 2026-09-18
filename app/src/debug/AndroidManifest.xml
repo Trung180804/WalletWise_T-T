@@ -5,6 +5,8 @@
     <!-- Firebase Emulator endpoints are local HTTP services. This override is
          compiled into debug builds only; release keeps the production policy. -->
     <application android:usesCleartextTraffic="true">
+        <!-- Instrumentation container; renders the existing support UI unchanged. -->
+        <activity android:name="androidx.activity.ComponentActivity" android:exported="false" tools:replace="android:exported" />
 
         <!-- Replace Firebase's library auto-init only in debug builds. The
              provider below either performs the normal resource-based init or,

@@ -121,6 +121,17 @@ class FirebaseEmulatorSafetyTest {
         assertEquals("192.0.2.10", physicalTestDevice?.host)
     }
 
+    @Test
+    fun `support checkpoint rejects wrong demo project host and ports`() {
+        fun resolve(project: String = "demo-walletwise", host: String = "10.0.2.2", firestore: Int = 8080, auth: Int = 9099) =
+            FirebaseEmulatorSafety.resolve(true, true, project, host, firestore, auth, true, true)
+        assertFails { resolve(project = "demo-other") }
+        assertFails { resolve(host = "firestore.googleapis.com") }
+        assertFails { resolve(firestore = 8081) }
+        assertFails { resolve(auth = 9098) }
+        assertFails { resolve(firestore = 9099, auth = 8080) }
+    }
+
     private fun assertFails(block: () -> Unit) {
         var failed = false
         try {
