@@ -18,6 +18,30 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransactionSessionControllerTest {
     @Test
+    fun financialPresenterReusesOneTransactionCollectorDuringMappingAndLiveUpdates() = runTest {
+        val repository = SessionTransactionRepository()
+        val controller = TransactionSessionController(this, repository)
+        val budgetRepository = object : com.example.walletwise.domain.repository.BudgetPlanRepository {
+            override fun observeBudgetPlan(userId: String, monthYear: String): Flow<RepositoryResult<com.example.walletwise.domain.model.BudgetPlan?>> = kotlinx.coroutines.flow.emptyFlow()
+            override suspend fun getBudgetPlan(userId: String, monthYear: String) = RepositoryResult.Success<com.example.walletwise.domain.model.BudgetPlan?>(null)
+            override suspend fun saveBudgetPlan(userId: String, plan: com.example.walletwise.domain.model.BudgetPlan) = RepositoryResult.Success(Unit)
+        }
+        val date = com.example.walletwise.domain.service.BudgetDate(2026, 9, 16)
+        val presenter = com.example.walletwise.presentation.budget.SmartBudgetPresenter(this,
+            kotlinx.coroutines.flow.MutableStateFlow(com.example.walletwise.presentation.budget.BudgetSessionState("user-a", "09-2026",
+                plan = com.example.walletwise.domain.model.BudgetPlan(totalBudget = 10000000.0, ruleType = "JARS"))), controller.transactions, budgetRepository,
+            object : com.example.walletwise.domain.service.BudgetDateProvider {
+                override fun currentLocalDate() = date
+                override fun localDateAt(epochMilliseconds: Long) = date
+            })
+        controller.setUserId("user-a"); advanceUntilIdle()
+        repository.emit("user-a", success(tx("one", "user-a", 10L).copy(type="Chi", category="Ăn uống", amount=50000.0)))
+        advanceUntilIdle(); presenter.onCategoryMapped("Ăn uống", "play"); advanceUntilIdle()
+        assertEquals(1, repository.observeCount["user-a"])
+        assertEquals(50000L, presenter.state.value.liveAllocation.buckets.last().spent)
+        presenter.close(); controller.close()
+    }
+    @Test
     fun sameUidKeepsOneCollector_andLogoutClearsUserData() = runTest {
         val repository = SessionTransactionRepository()
         val controller = TransactionSessionController(this, repository)

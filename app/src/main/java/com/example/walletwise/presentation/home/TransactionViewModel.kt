@@ -413,6 +413,10 @@ class TransactionViewModel(
         )
     }
 
+    fun selectBudgetMonth(monthKey: String) {
+        budgetSessionController.setSession(auth.currentUser?.uid, monthKey)
+    }
+
     fun createSmartBudgetPresenter(scope: CoroutineScope): SmartBudgetPresenter {
         refreshBudgetSession()
         return SmartBudgetPresenter(
@@ -420,7 +424,11 @@ class TransactionViewModel(
             budgetSession = budgetSessionState,
             transactions = transactions,
             repository = budgetRepository,
-            dateProvider = budgetDateProvider
+            dateProvider = budgetDateProvider,
+            onMonthSelected = ::selectBudgetMonth,
+            mappingRepository = com.example.walletwise.data.repository.FinancialMappingRepositoryImpl(),
+            categories = categories,
+            categorySession = categorySessionState
         )
     }
 

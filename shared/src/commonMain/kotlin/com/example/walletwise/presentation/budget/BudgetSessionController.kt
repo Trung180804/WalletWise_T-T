@@ -27,6 +27,7 @@ class BudgetSessionController(
     val state: StateFlow<BudgetSessionState> = mutableState.asStateFlow()
     private var observationJob: Job? = null
     private var observedKey: Pair<String, String>? = null
+    private var generation = 0L
 
     fun setSession(userId: String?, monthKey: String) {
         val normalizedUserId = userId?.takeIf { it.isNotBlank() }
@@ -34,6 +35,7 @@ class BudgetSessionController(
         if (key != null && key == observedKey && observationJob?.isActive == true) return
 
         observationJob?.cancel()
+        val token = ++generation
         observationJob = null
         observedKey = key
         if (key == null) {
@@ -48,6 +50,7 @@ class BudgetSessionController(
         )
         observationJob = scope.launch {
             repository.observeBudgetPlan(key.first, key.second).collect { result ->
+                if (generation != token || observedKey != key) return@collect
                 when (result) {
                     is RepositoryResult.Success -> mutableState.value = BudgetSessionState(
                         userId = key.first,
@@ -65,8 +68,10 @@ class BudgetSessionController(
     }
 
     fun close() {
+        generation++
         observationJob?.cancel()
         observationJob = null
         observedKey = null
+        mutableState.value = BudgetSessionState()
     }
 }

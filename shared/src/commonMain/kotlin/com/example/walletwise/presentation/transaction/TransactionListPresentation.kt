@@ -1,6 +1,7 @@
 package com.example.walletwise.presentation.transaction
 
 import com.example.walletwise.domain.model.Transaction
+import com.example.walletwise.domain.util.normalizeVietnameseSearchText
 import com.example.walletwise.domain.result.RepositoryError
 import com.example.walletwise.domain.service.sortedTransactionsNewestFirst
 import kotlinx.coroutines.CoroutineScope
