@@ -1,4 +1,4 @@
-# iOS Auth Emulator checks (Checkpoint 5D.1)
+# iOS Auth Emulator checks (Checkpoints 5D.1 and 5D.2)
 
 These checks use the Firebase Apple SDK 12.11.0 already pinned by the Xcode project.
 They never enable production Auth or access Firestore. The existing Android presenter
@@ -33,11 +33,27 @@ compiles out the adapter, transport hook, and integration probe, and rejects an
 emulator flag. Core-only bootstrap still uses the existing valid, ignored
 `GoogleService-Info.plist`; it does not instantiate Auth or Firestore in this mode.
 
-The shared callback service exports only opaque identity, stable failures, cancellation,
-and Auth methods. The connected presenter owns forms, validation, loading, routes,
-and session state. It emits no Home events. The authenticated Compose screen shows
-a safe status and logout; no profile data is fetched. Registration's username is
-validated locally but is not saved to a profile in this checkpoint.
+The callback boundary exports normalized `AuthUser` data (UID, nullable email/name,
+email verification), stable failures, cancellation, and Auth methods, never SDK types.
+UID must be nonblank; name/email are trimmed, blank values become null, and SDK email
+case is preserved. `AuthSession` retains its existing Android constructor fields and
+adds compatible normalized-user mapping. User/session string representations redact
+personal data. The Android repository/presenter/Profile flow is unchanged.
+
+Registration waits for SDK create, display-name `commitChanges`, and reload. Shared
+`AuthRegistrationProgress` gates the sequence and rejects missing/mismatched reload
+data or repeated callbacks. Profile/reload failures explicitly report a created account
+with incomplete registration, not success; no account is automatically deleted.
+The presenter establishes user state only from its SDK listener, not an operation
+completion. Because Firebase 12.11.0 auth-state listeners suppress same-UID metadata
+changes, after reload the adapter re-registers each active owner's listener for the
+SDK initial current-user snapshot. Listener generations reject previously queued
+callbacks. Completion success waits for matching refreshed listener data.
+
+The authenticated Compose shell shows status, display name (or email/member fallback),
+and logout, without UID, Home, or Firestore. Passwords remain temporary form/request
+data and are cleared on success, route change, logout, and disposal. Registration's
+name is saved only to Firebase Auth displayName; no Firestore profile is accessed.
 
 Each call to `walletWiseComposeViewController(service:observer:)` creates a new
 `AuthControllerSession` and presenter. SwiftUI's per-controller coordinator retains
@@ -95,10 +111,25 @@ submits at both presenter and adapter boundaries, logs out, rejects a wrong pass
 and logs in correctly. A second process restores the same Keychain identity **without
 login**, logs out, and submits reset. A third process confirms the signed-out session.
 Only status markers are emitted. The temporary fixture in simulator app preferences
-contains only test email and the identity to compare, never a password, and is removed
-after reset. The runner checks exactly one account and one password-reset
+contains only test email, the identity to compare, and expected name for user A, never
+a password. It is removed after reset/logout. The runner checks exactly one account
+and its exact display name after A registers, plus one password-reset
 OOB code through localhost admin APIs, then deletes every demo account. It refuses
 admin redirects. The public `owner` sentinel is Emulator-only, not a credential.
+Then a second SDK-created account without a display name is used for real login,
+email fallback, isolation from user A, another Keychain restore, and logout/relaunch.
+All demo accounts (two after the user-B checks) are deleted in the runner's finally.
+No password is persisted between processes.
+
+The probe emits only SHA-256 fingerprints of the temporary fixture's email, identity,
+and expected display name. The runner compares those fingerprints against Emulator
+Admin API metadata, without printing full values. It does not read the app's raw
+CFPreferences plist, whose on-disk snapshot may lag behind the active process.
+
+Profile-update failure is covered deterministically by the shared sequence/presenter
+unit tests used by the adapter. Runtime fault injection is not claimed as PASS unless
+a separate Emulator run proves it; do not alter production code or loosen the guard
+to manufacture a failure.
 
 Stop the CLI with Ctrl-C after testing: accounts are deleted by the runner, but OOB
 codes are in-memory and disappear when the Emulator exits. Verify **no** listener

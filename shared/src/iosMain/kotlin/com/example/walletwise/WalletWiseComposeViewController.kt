@@ -53,7 +53,7 @@ private fun WalletWiseAuthContent(presenter: ConnectedAuthPresenter) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Đã xác thực")
-            Text("Trang chủ chưa được kết nối trên iOS.")
+            Text(state.user?.displayLabel.orEmpty())
             (state.sessionOperation as? AuthOperationState.RepositoryError)?.let { Text(it.message) }
             Button(onClick = presenter::logout) { Text("Đăng xuất") }
         }

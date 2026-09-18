@@ -5,6 +5,7 @@ Status output deliberately excludes accounts, tokens, passwords, and reset codes
 Raw artifacts go only to a caller-supplied directory outside the repository.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -43,6 +44,18 @@ def account_count():
     # This is a LOCAL Emulator routing path, not a production hostname connection.
     data = admin("/identitytoolkit.googleapis.com/v1/projects/" + PROJECT + "/accounts:batchGet")
     return len(data.get("users", []))
+
+
+def fixture(artifacts, name):
+    return json.loads((artifacts / (name + ".fixture-sha256.json")).read_text())
+
+
+def fingerprint(value):
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def emulator_users():
+    return admin("/identitytoolkit.googleapis.com/v1/projects/" + PROJECT + "/accounts:batchGet").get("users", [])
 
 
 def command(*arguments, environment=None, check=True):
@@ -92,11 +105,14 @@ def phase(simulator, artifacts, name):
                         raise RuntimeError("app process disappeared after probe")
                     if text.count("[AuthBootstrap] configured once") != 1:
                         raise RuntimeError("bootstrap marker count must be exactly one per process")
-                    if name in ("exercise", "signed-out"):
+                    if name in ("exercise", "signed-out", "exercise-user-b", "signed-out-b"):
                         command("xcrun", "simctl", "io", simulator, "screenshot", str(artifacts / (name + ".png")))
                     passes = re.findall(r"\[AuthIntegration\] PASS ([a-z0-9-]+)", text)
+                    fingerprints = dict(re.findall(r"\[AuthFixture\] (email|subject|displayName) sha256=([a-f0-9]{64})", text))
+                    if name in ("exercise", "exercise-user-b"):
+                        (artifacts / (name + ".fixture-sha256.json")).write_text(json.dumps(fingerprints, indent=2) + "\n")
                     endpoint_count = text.count("[AuthTransport] request endpoint=127.0.0.1:9099")
-                    if name in ("exercise", "restore-reset-logout") and endpoint_count == 0:
+                    if name in ("exercise", "restore-reset-logout", "exercise-user-b") and endpoint_count == 0:
                         raise RuntimeError("no Firebase SDK emulator transport audit evidence")
                     result = {"phase": name, "pid": pid, "alive": True, "passes": passes,
                               "failures": 0, "production_endpoint_matches": 0,
@@ -209,12 +225,37 @@ def main():
         if account_count() != 1:
             raise RuntimeError("double submit must create exactly one emulator account")
         print(json.dumps({"check": "exactly-one-emulator-account", "pass": True}), flush=True)
+        user_a = fixture(artifacts, "exercise")
+        users = emulator_users()
+        comparisons = {
+            "fixture_keys_correct": set(user_a) == {"email", "subject", "displayName"},
+            "uid_matches": fingerprint(users[0].get("localId", "")) == user_a.get("subject"),
+            "email_matches": fingerprint(users[0].get("email", "")) == user_a.get("email"),
+            "display_name_matches": fingerprint(users[0].get("displayName", "")) == user_a.get("displayName"),
+        }
+        if not all(comparisons.values()):
+            print(json.dumps({"admin_comparisons": comparisons, "admin_field_names": sorted(users[0])}), flush=True)
+        if not all(comparisons.values()):
+            raise RuntimeError("registered emulator user/display name does not match the fixture")
+        print(json.dumps({"check": "emulator-admin-exact-user-display-name", "pass": True}), flush=True)
         results.append(phase(args.simulator, artifacts, "restore-reset-logout"))
         codes = admin("/emulator/v1/projects/" + PROJECT + "/oobCodes").get("oobCodes", [])
         if len(codes) != 1 or codes[0].get("requestType") != "PASSWORD_RESET":
             raise RuntimeError("expected exactly one Emulator password-reset OOB request")
         print(json.dumps({"check": "one-emulator-password-reset-code-no-email-delivery", "pass": True}), flush=True)
         results.append(phase(args.simulator, artifacts, "signed-out"))
+        results.append(phase(args.simulator, artifacts, "exercise-user-b"))
+        user_b = fixture(artifacts, "exercise-user-b")
+        users = emulator_users()
+        matched = [user for user in users if fingerprint(user.get("localId", "")) == user_b["subject"]]
+        if (len(users) != 2 or len(matched) != 1 or user_b["subject"] == user_a["subject"]
+                or fingerprint(matched[0].get("email", "")) != user_b["email"]
+                or (matched[0].get("displayName") or "").strip()
+                or user_b["email"] == user_a["email"] or set(user_b) != {"email", "subject"}):
+            raise RuntimeError("user B must be a distinct emulator account without display name")
+        print(json.dumps({"check": "user-b-distinct-account-no-display-name", "pass": True}), flush=True)
+        results.append(phase(args.simulator, artifacts, "restore-user-b"))
+        results.append(phase(args.simulator, artifacts, "signed-out-b"))
     finally:
         if started:
             command("xcrun", "simctl", "terminate", args.simulator, BUNDLE, check=False)

@@ -3,7 +3,7 @@ package com.example.walletwise.presentation.auth
 import com.example.walletwise.domain.repository.AuthCancellation
 import com.example.walletwise.domain.repository.AuthCompletion
 import com.example.walletwise.domain.repository.AuthFailure
-import com.example.walletwise.domain.repository.AuthIdentity
+import com.example.walletwise.domain.model.AuthUser
 import com.example.walletwise.domain.repository.AuthStateObserver
 import com.example.walletwise.domain.repository.CallbackAuthService
 import kotlin.test.Test
@@ -13,6 +13,7 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class AuthControllerSessionTest {
+    private fun user(uid: String) = AuthUser.create(uid, null, null, false)!!
     private class FakeService : CallbackAuthService {
         val observers = mutableListOf<AuthStateObserver>()
         var observerCancellations = 0
@@ -32,7 +33,7 @@ class AuthControllerSessionTest {
                 override fun cancel() { requestCancellations++ }
             }
         }
-        override fun register(email: String, password: String, completion: AuthCompletion) = login(email, password, completion)
+        override fun register(email: String, password: String, displayName: String, completion: AuthCompletion) = login(email, password, completion)
         override fun resetPassword(email: String, completion: AuthCompletion) = login(email, "", completion)
         override fun logout(): AuthFailure? { logoutCalls++; return null }
     }
@@ -61,7 +62,7 @@ class AuthControllerSessionTest {
         assertEquals("second-form", second.presenter.snapshot.auth.login.password)
         second.presenter.onPasswordChanged("still-editable")
         assertEquals("still-editable", second.presenter.snapshot.auth.login.password)
-        service.observers[1].changed(AuthIdentity("current"))
+        service.observers[1].changed(user("current"))
         assertTrue(second.presenter.snapshot.isAuthenticated)
         assertFalse(first.presenter.snapshot.isAuthenticated)
         assertEquals(1, service.observerCancellations)
@@ -94,8 +95,8 @@ class AuthControllerSessionTest {
         val second = AuthControllerSession(service)
         second.presenter.onPasswordChanged("second-form")
         val other = second.presenter.snapshot
-        service.completion!!.complete(AuthIdentity("late"), null)
-        service.observers[0].changed(AuthIdentity("late"))
+        service.completion!!.complete(user("late"), null)
+        service.observers[0].changed(user("late"))
         assertEquals(disposed, first.presenter.snapshot)
         assertEquals(other, second.presenter.snapshot)
         assertEquals(1, service.requestCancellations)
@@ -105,7 +106,7 @@ class AuthControllerSessionTest {
     @Test fun repeatedDisposeCancelsExactlyOnceAndNeverLogsOutSdkSession() {
         val service = FakeService()
         val owner = AuthControllerSession(service)
-        service.observers.single().changed(AuthIdentity("signed-in"))
+        service.observers.single().changed(user("signed-in"))
         owner.dispose()
         owner.dispose()
         owner.presenter.dispose()

@@ -3,7 +3,7 @@ package com.example.walletwise.presentation.auth
 import com.example.walletwise.domain.repository.AuthCancellation
 import com.example.walletwise.domain.repository.AuthCompletion
 import com.example.walletwise.domain.repository.AuthFailure
-import com.example.walletwise.domain.repository.AuthIdentity
+import com.example.walletwise.domain.model.AuthUser
 import com.example.walletwise.domain.repository.AuthStateObserver
 import com.example.walletwise.domain.repository.CallbackAuthService
 import kotlin.test.Test
@@ -14,6 +14,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ConnectedAuthPresenterTest {
+    private fun user(uid: String) = AuthUser.create(uid, null, null, false)!!
     private class Cancellation : AuthCancellation {
         var cancelled = false
         override fun cancel() { cancelled = true }
@@ -41,7 +42,7 @@ class ConnectedAuthPresenterTest {
             return Cancellation().also { cancellations += it }
         }
         override fun login(email: String, password: String, completion: AuthCompletion) = request("login", email, password, completion)
-        override fun register(email: String, password: String, completion: AuthCompletion) = request("register", email, password, completion)
+        override fun register(email: String, password: String, displayName: String, completion: AuthCompletion) = request("register", email, password, completion)
         override fun resetPassword(email: String, completion: AuthCompletion) = request("reset", email, "", completion)
         override fun logout() = logoutFailure
     }
@@ -127,7 +128,8 @@ class ConnectedAuthPresenterTest {
         presenter.fill()
         presenter.submit()
         assertFalse(presenter.snapshot.isAuthenticated)
-        auth.completions.single().complete(AuthIdentity("first"), null)
+        auth.observer.changed(user("first"))
+        auth.completions.single().complete(user("first"), null)
         assertTrue(presenter.snapshot.isAuthenticated)
         assertEquals(AuthUiState(), presenter.snapshot.auth)
         assertIs<AuthOperationState.Success>(presenter.snapshot.sessionOperation)
@@ -152,9 +154,10 @@ class ConnectedAuthPresenterTest {
         presenter.fill(AuthRoute.REGISTER)
         presenter.submit()
         assertFalse(presenter.snapshot.isAuthenticated)
-        auth.completions.single().complete(AuthIdentity("created"), null)
+        auth.observer.changed(user("created"))
+        auth.completions.single().complete(user("created"), null)
         assertTrue(presenter.snapshot.isAuthenticated)
-        assertEquals("created", presenter.snapshot.identity?.subject)
+        assertEquals("created", presenter.snapshot.user?.uid)
         assertEquals(AuthUiState(), presenter.snapshot.auth)
         assertNull(presenter.snapshot.auth.pendingEvent)
     }
@@ -221,7 +224,7 @@ class ConnectedAuthPresenterTest {
     @Test fun logoutClearsSessionAndAllForms() {
         val auth = FakeAuth()
         val presenter = ConnectedAuthPresenter(auth)
-        auth.observer.changed(AuthIdentity("first"))
+        auth.observer.changed(user("first"))
         presenter.logout()
         assertFalse(presenter.snapshot.isAuthenticated)
         assertEquals(AuthUiState(), presenter.snapshot.auth)
@@ -231,7 +234,7 @@ class ConnectedAuthPresenterTest {
     @Test fun logoutFailureRetainsTheRealSessionAndReportsSafeError() {
         val auth = FakeAuth().apply { logoutFailure = AuthFailure.UNKNOWN }
         val presenter = ConnectedAuthPresenter(auth)
-        auth.observer.changed(AuthIdentity("first"))
+        auth.observer.changed(user("first"))
         presenter.logout()
         assertTrue(presenter.snapshot.isAuthenticated)
         assertIs<AuthOperationState.RepositoryError>(presenter.snapshot.sessionOperation)
@@ -241,15 +244,15 @@ class ConnectedAuthPresenterTest {
         val auth = FakeAuth()
         val presenter = ConnectedAuthPresenter(auth)
         presenter.fill()
-        auth.observer.changed(AuthIdentity("first"))
+        auth.observer.changed(user("first"))
         assertEquals(AuthUiState(), presenter.snapshot.auth)
         presenter.logout()
         presenter.fill(AuthRoute.REGISTER)
-        auth.observer.changed(AuthIdentity("second"))
-        assertEquals("second", presenter.snapshot.identity?.subject)
+        auth.observer.changed(user("second"))
+        assertEquals("second", presenter.snapshot.user?.uid)
         assertEquals(AuthUiState(), presenter.snapshot.auth)
         auth.observer.changed(null)
-        assertNull(presenter.snapshot.identity)
+        assertNull(presenter.snapshot.user)
         assertEquals(AuthUiState(), presenter.snapshot.auth)
     }
 
@@ -261,7 +264,7 @@ class ConnectedAuthPresenterTest {
         presenter.navigateTo(AuthRoute.REGISTER)
         val next = presenter.snapshot
         assertTrue(auth.cancellations.single().cancelled)
-        auth.completions.single().complete(AuthIdentity("late"), null)
+        auth.completions.single().complete(user("late"), null)
         auth.completions.single().complete(null, AuthFailure.UNKNOWN)
         assertEquals(next, presenter.snapshot)
     }
@@ -275,8 +278,8 @@ class ConnectedAuthPresenterTest {
         val disposed = presenter.snapshot
         assertTrue(auth.observation.cancelled)
         assertTrue(auth.cancellations.single().cancelled)
-        auth.completions.single().complete(AuthIdentity("late"), null)
-        auth.observer.changed(AuthIdentity("late"))
+        auth.completions.single().complete(user("late"), null)
+        auth.observer.changed(user("late"))
         assertEquals(disposed, presenter.snapshot)
         assertEquals(AuthUiState(), presenter.snapshot.auth)
     }
@@ -288,7 +291,7 @@ class ConnectedAuthPresenterTest {
         presenter.submit()
         auth.completions.single().complete(null, AuthFailure.INVALID_CREDENTIALS)
         val failed = presenter.snapshot
-        auth.completions.single().complete(AuthIdentity("duplicate"), null)
+        auth.completions.single().complete(user("duplicate"), null)
         assertEquals(failed, presenter.snapshot)
     }
 
@@ -297,12 +300,12 @@ class ConnectedAuthPresenterTest {
         val presenter = ConnectedAuthPresenter(auth)
         presenter.fill()
         presenter.submit()
-        auth.observer.changed(AuthIdentity("first"))
-        auth.observer.changed(AuthIdentity("second"))
+        auth.observer.changed(user("first"))
+        auth.observer.changed(user("second"))
         val second = presenter.snapshot
-        auth.completions.single().complete(AuthIdentity("first"), null)
+        auth.completions.single().complete(user("first"), null)
         assertEquals(second, presenter.snapshot)
-        assertEquals("second", presenter.snapshot.identity?.subject)
+        assertEquals("second", presenter.snapshot.user?.uid)
     }
 
     @Test fun unavailableAdapterFailsClosed() {
@@ -313,8 +316,8 @@ class ConnectedAuthPresenterTest {
         assertEquals(AuthOperationState.RepositoryError("Dịch vụ xác thực chưa được kết nối."), presenter.operation())
     }
 
-    @Test fun identityStringRepresentationIsRedacted() {
-        assertEquals("AuthIdentity(redacted)", AuthIdentity("private-subject").toString())
+    @Test fun userStringRepresentationIsRedacted() {
+        assertEquals("AuthUser(redacted)", user("private-subject").toString())
     }
 
     private fun ConnectedAuthPresenter.operation(): AuthOperationState = when (snapshot.route) {

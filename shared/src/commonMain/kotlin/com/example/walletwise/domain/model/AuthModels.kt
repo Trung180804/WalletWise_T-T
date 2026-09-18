@@ -3,8 +3,22 @@ package com.example.walletwise.domain.model
 data class AuthSession(
     val userId: String,
     val email: String,
-    val displayName: String = ""
-)
+    val displayName: String = "",
+    val emailVerified: Boolean = false
+) {
+    val user: AuthUser? get() = AuthUser.create(userId, email, displayName, emailVerified)
+
+    override fun toString(): String = "AuthSession(redacted)"
+
+    companion object {
+        fun fromUser(user: AuthUser): AuthSession = AuthSession(
+            userId = user.uid,
+            email = user.email.orEmpty(),
+            displayName = user.displayName.orEmpty(),
+            emailVerified = user.emailVerified
+        )
+    }
+}
 
 data class LoginInput(
     val email: String,
