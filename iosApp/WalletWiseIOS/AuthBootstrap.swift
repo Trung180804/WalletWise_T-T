@@ -3,17 +3,28 @@ import FirebaseCore
 import WalletWiseShared
 #if DEBUG
 import GTMSessionFetcherCore
+import FirebaseFirestore
 #endif
 
 final class AuthBootstrap {
     private static var configured = false
     #if DEBUG
     private(set) static var adapter: FirebaseAuthAdapter?
+    private static var emulatorFirestore: Firestore?
     #endif
 
     static var service: CallbackAuthService? {
         #if DEBUG
         return adapter
+        #else
+        return nil
+        #endif
+    }
+
+    static var transactionService: CallbackTransactionService? {
+        #if DEBUG
+        guard let emulatorFirestore, let adapter else { return nil }
+        return FirebaseTransactionAdapter(firestore: emulatorFirestore, auth: adapter)
         #else
         return nil
         #endif
@@ -40,6 +51,21 @@ final class AuthBootstrap {
             let app = FirebaseApp.app(name: "WalletWiseAuthEmulator")!
             let service = FirebaseAuthAdapter(emulatorApp: app)
             adapter = service
+            if TransactionEmulatorPolicy.evaluate(environment) == .enabled {
+                let firestore = Firestore.firestore(app: app)
+                // This SDK rejects disabled SSL while its default production host is still selected.
+                // Select the emulator host first, then apply SSL/cache settings before any read.
+                firestore.useEmulator(withHost: "127.0.0.1", port: 8080)
+                let settings = firestore.settings
+                settings.cacheSettings = MemoryCacheSettings()
+                settings.isSSLEnabled = false
+                firestore.settings = settings
+                precondition(firestore.settings.host == "127.0.0.1:8080" && !firestore.settings.isSSLEnabled)
+                emulatorFirestore = firestore
+                NSLog("[FirestoreBootstrap] emulator configured before requests endpoint=127.0.0.1:8080")
+            } else {
+                NSLog("[FirestoreBootstrap] adapter disabled; emulator guard rejected or absent")
+            }
             NSLog("[AuthBootstrap] configured once; emulator endpoint=127.0.0.1:9099 project=demo-walletwise")
             return
         }

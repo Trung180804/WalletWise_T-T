@@ -171,3 +171,59 @@ Primary references:
 - [Connect an app to the Auth Emulator](https://firebase.google.com/docs/emulator-suite/connect_auth)
 - [Install/configure the Emulator Suite](https://firebase.google.com/docs/emulator-suite/install_and_configure)
 - [GTMSessionFetcher public test-hook contract (5.3.1)](https://github.com/google/gtm-session-fetcher/blob/v5.3.1/Sources/Core/Public/GTMSessionFetcher/GTMSessionFetcher.h)
+# Checkpoint 5E: iOS Home and Firestore (demo only)
+
+The existing Compose Auth controller also owns a `TransactionHomeSession`, a
+`TransactionSessionController`, and the shared list presenter. After authenticated
+Auth state, Home uses the shared transaction grid and read-only detail dialog.
+Swift supplies snapshots through `CallbackTransactionService`; the callback
+repository maps them through `FirestoreWireMapper`. Auth UID is authoritative,
+and all state is masked and cleared at identity boundaries. Controller disposal
+removes listeners without signing out the SDK or deleting documents.
+
+Enable Firestore only in Debug with all of these exact environment values, in
+addition to the four Auth flags documented below:
+
+```text
+WALLETWISE_FIRESTORE_EMULATOR=1
+WALLETWISE_FIRESTORE_PROJECT=demo-walletwise
+WALLETWISE_FIRESTORE_HOST=127.0.0.1
+WALLETWISE_FIRESTORE_PORT=8080
+```
+
+The named demo Firebase app has no production credentials. Firestore uses an
+in-memory cache and `useEmulator` before any request; the adapter checks the
+app/project, host, and disabled SSL before adding its sole primary listener.
+Firestore uses gRPC, so its endpoint guard is independent of the Auth fetcher
+hook. Release compiles out the SDK adapter/probe and returns no transaction
+service. No production Firestore behavior or persistent offline sync is enabled.
+
+Primary is `users/{uid}/transactions`. Only a server-confirmed empty primary
+triggers a server-only `TRANSACTIONS` query filtered by `userId`. There is no
+legacy listener or merging. The fallback is read once per observation; refresh
+is required to see subsequent legacy changes. A late legacy result cannot
+replace nonempty primary data. Images use the existing image slot with a stable
+`No image` placeholder on iOS, including broken URLs; no image requests/uploads
+are made. Add/edit/delete controls are hidden on the iOS detail.
+
+After installing the Debug app, run the owning, self-cleaning harness (Java 21+
+and an existing Firebase CLI are required):
+
+```sh
+python3 tools/firebase-auth-emulator/run_transaction_simulator_checks.py \
+  --simulator SIMULATOR_UUID \
+  --artifacts /private/tmp/walletwise-5e-integration \
+  --firebase /path/to/firebase \
+  --java-home /path/to/java-home
+```
+
+It refuses occupied ports, starts fresh Auth + Firestore emulators with
+`--project demo-walletwise`, creates two random demo accounts, seeds isolated
+transactions, and drives the same Compose sessions. Native probe status logs
+contain no user/document identifiers, emails, amounts, notes, passwords, or
+tokens. The harness checks app logs and actual localhost TCP socket evidence;
+screenshots and reports stay outside the repository. Its `finally` cleanup clears
+only the freshly owned demo emulator's fixtures, verifies zero accounts and
+transactions, stops the owned process, and verifies ports 9099/8080/4400/4500
+are closed. It never logs into Firebase CLI, deploys rules, or touches a real
+project. `firestore.rules` is exclusively this demo emulator's read-only policy.

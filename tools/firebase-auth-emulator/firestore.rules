@@ -1,0 +1,14 @@
+rules_version = '2';
+// Local demo emulator only. SDK is read-only; the REST harness uses the emulator owner sentinel.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/transactions/{transactionId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /TRANSACTIONS/{transactionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+  }
+}

@@ -26,36 +26,43 @@ import com.example.walletwise.presentation.auth.ui.ForgotPasswordScreenContent
 import com.example.walletwise.presentation.auth.ui.LoginScreenContent
 import com.example.walletwise.presentation.auth.ui.RegisterScreenContent
 import platform.UIKit.UIViewController
+import com.example.walletwise.domain.repository.CallbackTransactionService
+import com.example.walletwise.data.repository.CallbackTransactionRepository
+import com.example.walletwise.presentation.transaction.*
+import kotlinx.coroutines.*
 
 fun walletWiseComposeViewController(
     service: CallbackAuthService?,
-    observer: AuthControllerObserver? = null
+    observer: AuthControllerObserver? = null,
+    transactionService: CallbackTransactionService? = null,
+    homeObserver: TransactionHomeObserver? = null
 ): UIViewController {
     val session = AuthControllerSession(service)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val home = TransactionHomeSession(scope, session.presenter, CallbackTransactionRepository(transactionService), IosTransactionDateTimeProvider())
+    fun dispose() { home.dispose(); session.dispose(); scope.cancel() }
     val controller = ComposeUIViewController {
-        DisposableEffect(session) { onDispose { session.dispose() } }
+        DisposableEffect(session) { onDispose { dispose() } }
         MaterialTheme {
-            WalletWiseAuthContent(session.presenter)
+            WalletWiseAuthContent(session.presenter, home)
         }
     }
     observer?.created(session)
+    homeObserver?.createdHome(home)
     return controller
 }
 
 @Composable
-private fun WalletWiseAuthContent(presenter: ConnectedAuthPresenter) {
+private fun WalletWiseAuthContent(presenter: ConnectedAuthPresenter, home: TransactionHomeSession) {
     val state by presenter.state.collectAsState()
 
     if (state.isAuthenticated) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("Đã xác thực")
-            Text(state.user?.displayLabel.orEmpty())
-            (state.sessionOperation as? AuthOperationState.RepositoryError)?.let { Text(it.message) }
-            Button(onClick = presenter::logout) { Text("Đăng xuất") }
+        val homeState by home.state.collectAsState()
+        // Auth changes can be composed before a queued presentation update; mask by authoritative UID.
+        val owned = homeState.takeIf { it.userId == state.user?.uid }
+            ?: TransactionHomeState(userId = state.user?.uid, displayLabel = state.user?.displayLabel.orEmpty(), list = TransactionListUiState(userId = state.user?.uid, isLoading = true))
+        androidx.compose.runtime.key(state.user?.uid) {
+            TransactionHomeContent(owned, home, (state.sessionOperation as? AuthOperationState.RepositoryError)?.message)
         }
         return
     }

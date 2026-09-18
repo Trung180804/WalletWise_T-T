@@ -32,12 +32,16 @@ class TransactionSessionController(
 
     private var observedUserId: String? = null
     private var observationJob: Job? = null
+    private var generation = 0L
+    private var closed = false
 
     fun setUserId(userId: String?) {
+        if (closed) return
         val normalized = userId?.takeIf { it.isNotBlank() }
         if (normalized == observedUserId && observationJob?.isActive == true) return
 
         observationJob?.cancel()
+        val currentGeneration = ++generation
         observationJob = null
         observedUserId = normalized
         publish(
@@ -48,7 +52,7 @@ class TransactionSessionController(
 
         observationJob = scope.launch {
             repository.observeTransactions(normalized).collect { result ->
-                if (observedUserId != normalized) return@collect
+                if (closed || generation != currentGeneration || observedUserId != normalized) return@collect
                 when (result) {
                     is RepositoryResult.Success -> publish(
                         TransactionSessionState(
@@ -77,6 +81,9 @@ class TransactionSessionController(
     }
 
     fun close() {
+        if (closed) return
+        closed = true
+        generation++
         observationJob?.cancel()
         observationJob = null
         observedUserId = null

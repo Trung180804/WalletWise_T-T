@@ -60,7 +60,11 @@ fun TransactionListContent(
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
-    imageContent: TransactionImageContent? = null
+    imageContent: TransactionImageContent? = null,
+    readOnly: Boolean = false,
+    selectedTransactionId: String? = null,
+    onDetailDismissed: () -> Unit = {},
+    emptyImageLabel: String = "Không có ảnh"
 ) {
     var selectedRow by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
     var pendingDelete by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
@@ -93,8 +97,9 @@ fun TransactionListContent(
                     TransactionCard(
                         row = row,
                         imageContent = imageContent,
+                        emptyImageLabel = emptyImageLabel,
                         onClick = {
-                            selectedRow = row
+                            if (!readOnly) selectedRow = row
                             onRowSelected(row.id)
                         }
                     )
@@ -103,11 +108,13 @@ fun TransactionListContent(
         }
     }
 
-    selectedRow?.let { row ->
+    (if (readOnly) selectedTransactionId?.let { id -> state.rows.find { it.id == id } } else selectedRow)?.let { row ->
         TransactionDetailDialog(
             row = row,
             imageContent = imageContent,
-            onDismiss = { selectedRow = null },
+            readOnly = readOnly,
+            emptyImageLabel = emptyImageLabel,
+            onDismiss = { selectedRow = null; onDetailDismissed() },
             onEdit = {
                 selectedRow = null
                 onEdit(row.id)
@@ -176,6 +183,7 @@ private fun TransactionError(message: String, onRetry: () -> Unit, modifier: Mod
 @Composable
 private fun TransactionCard(
     row: TransactionRowViewData,
+    emptyImageLabel: String,
     imageContent: TransactionImageContent?,
     onClick: () -> Unit
 ) {
@@ -188,7 +196,7 @@ private fun TransactionCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(12.dp)) {
-            TransactionImage(row, imageContent, Modifier.fillMaxWidth().height(80.dp))
+            TransactionImage(row, emptyImageLabel, imageContent, Modifier.fillMaxWidth().height(80.dp))
             Spacer(Modifier.height(12.dp))
             Text(row.amountText, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = amountColor)
             Spacer(Modifier.height(4.dp))
@@ -222,6 +230,7 @@ private fun TransactionCard(
 @Composable
 private fun TransactionImage(
     row: TransactionRowViewData,
+    emptyImageLabel: String,
     imageContent: TransactionImageContent?,
     modifier: Modifier
 ) {
@@ -233,7 +242,7 @@ private fun TransactionImage(
             imageContent(row.imageUrl, Modifier.fillMaxSize())
         } else {
             Text(
-                if (row.hasImage) "Có ảnh" else "Không có ảnh",
+                if (row.hasImage) "Có ảnh" else emptyImageLabel,
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -245,6 +254,8 @@ private fun TransactionImage(
 private fun TransactionDetailDialog(
     row: TransactionRowViewData,
     imageContent: TransactionImageContent?,
+    readOnly: Boolean,
+    emptyImageLabel: String,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -269,7 +280,7 @@ private fun TransactionDetailDialog(
                 }
                 Spacer(Modifier.height(20.dp))
                 if (row.hasImage) {
-                    TransactionImage(row, imageContent, Modifier.fillMaxWidth().height(160.dp))
+                    TransactionImage(row, emptyImageLabel, imageContent, Modifier.fillMaxWidth().height(160.dp))
                     Spacer(Modifier.height(20.dp))
                 }
                 Text(row.amountText, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = amountColor)
@@ -291,7 +302,7 @@ private fun TransactionDetailDialog(
                     }
                 }
                 Spacer(Modifier.height(24.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (!readOnly) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = onDelete,
                         modifier = Modifier.weight(1f).height(48.dp),
