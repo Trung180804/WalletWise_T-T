@@ -138,7 +138,7 @@ class RecurringAutomationCoordinatorTest {
     }
 
     @Test
-    fun finalFiniteOccurrenceDisablesRuleAndACompletedRetryDoesNotNotifyTwice() = runTest {
+    fun legacyOneRunRuleStaysEnabledAndACompletedRetryDoesNotNotifyTwice() = runTest {
         val fixture = fixture(now = dateTime(2026, 9, 5, 8))
         val due = rule(timesCount = "1")
         fixture.repository.rules[due.id] = due
@@ -148,7 +148,8 @@ class RecurringAutomationCoordinatorTest {
 
         assertEquals(true, first.execution?.transactionWasCreated)
         assertEquals(false, retry.execution?.transactionWasCreated)
-        assertFalse(fixture.repository.rules.getValue(due.id).isEnabled)
+        assertTrue(fixture.repository.rules.getValue(due.id).isEnabled)
+        assertEquals(dateTime(2026, 9, 6, 8), RecurringScheduleCalculator.nextOccurrence(fixture.repository.rules.getValue(due.id), dateTime(2026, 9, 5, 8))?.at)
         assertEquals("2026-09-05", fixture.repository.rules.getValue(due.id).lastExecutedDate)
         assertEquals(setOf("rule_2026-09-05"), fixture.repository.transactionIds)
         assertEquals(1, fixture.platform.notifications.size)

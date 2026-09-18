@@ -54,7 +54,7 @@ data class RecurringTransaction(
     val category: String = "Hóa đơn",
     val paymentMethod: String = "Tiền mặt",
     val frequency: String = RECURRING_FREQUENCY_MONTHLY,
-    val timesCount: String = "1",
+    val timesCount: String = RECURRING_TIMES_UNLIMITED,
     val startDate: String = "",
     val time: String = "20:15",
     val note: String = "",

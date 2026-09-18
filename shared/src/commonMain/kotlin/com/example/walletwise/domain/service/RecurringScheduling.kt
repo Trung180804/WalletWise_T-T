@@ -104,9 +104,8 @@ class RecurringAutomationCoordinator(
         recurring.forEach { rule ->
             outcomes += if (rule.userId != userId || rule.id.isBlank()) {
                 RecurringProcessingOutcome(RecurringProcessingStatus.REJECTED_IDENTITY)
-            } else if (!rule.isEnabled) {
-                cancelLocked(RecurringKey(userId, rule.id))
             } else {
+                // Re-read canonical enabled atomically; a stale disabled snapshot cannot cancel a re-enabled rule.
                 processLocked(userId, rule.id, retryAttempt = 0, forceSchedule = forceSchedule)
             }
         }

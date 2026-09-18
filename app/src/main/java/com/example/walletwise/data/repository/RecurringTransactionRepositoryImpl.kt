@@ -10,6 +10,8 @@ import com.example.walletwise.domain.result.RepositoryErrorCode
 import com.example.walletwise.domain.result.RepositoryResult
 import com.example.walletwise.domain.service.RecurringScheduleCalculator
 import com.example.walletwise.domain.service.ReminderLocalDateTime
+import com.example.walletwise.domain.service.RecurringDateTimeProvider
+import com.example.walletwise.data.time.AndroidRecurringDateTimeProvider
 import com.example.walletwise.domain.usecase.CreateRecurringTransactionWriteUseCase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -23,7 +25,8 @@ class RecurringTransactionRepositoryImpl(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val createTransactionWrite: CreateRecurringTransactionWriteUseCase =
-        CreateRecurringTransactionWriteUseCase()
+        CreateRecurringTransactionWriteUseCase(),
+    private val dateTimeProvider: RecurringDateTimeProvider = AndroidRecurringDateTimeProvider()
 ) : RecurringTransactionRepository {
 
     override fun observeRecurringTransactions(
@@ -113,9 +116,22 @@ class RecurringTransactionRepositoryImpl(
         isEnabled: Boolean
     ): RepositoryResult<Unit> = write("Không thể đổi trạng thái giao dịch định kỳ") {
         requireSession(userId)
-        recurringDocument(userId, recurringId)
-            .update(FirestoreWireMapper.enabledFields(isEnabled))
-            .await()
+        val ref = recurringDocument(userId, recurringId)
+        db.runTransaction { transaction ->
+            requireSession(userId)
+            val stored = transaction.get(ref)
+            check(stored.exists())
+            val fields = FirestoreWireMapper.enabledFields(isEnabled).toMutableMap()
+            val rule = FirestoreWireMapper.recurringFromMap(stored.id, userId, stored.data.orEmpty())
+            if (isEnabled && !rule.isEnabled) {
+                // Explicit re-enabling skips missed periods, then resumes the original anchor.
+                RecurringScheduleCalculator.latestDueOccurrence(rule, dateTimeProvider.currentLocalDateTime())?.let { due ->
+                    val key = RecurringScheduleCalculator.occurrenceKey(due)
+                    if (!RecurringScheduleCalculator.hasProcessed(rule.lastExecutedDate, key)) fields["lastExecutedDate"] = key
+                }
+            }
+            transaction.update(ref, fields)
+        }.await()
     }
 
     override suspend fun updateLastExecutedDate(
@@ -155,22 +171,14 @@ class RecurringTransactionRepositoryImpl(
                 ?: return@runTransaction RecurringExecutionResult(false, recurring)
             val occurrenceKey = RecurringScheduleCalculator.occurrenceKey(occurrence)
             if (RecurringScheduleCalculator.hasProcessed(recurring.lastExecutedDate, occurrenceKey)) {
-                val completed = RecurringScheduleCalculator.hasReachedExecutionLimit(recurring, occurrence.index)
-                if (completed && recurring.isEnabled) {
-                    val disabled = recurring.copy(isEnabled = false)
-                    transaction.set(recurringRef, FirestoreWireMapper.recurringToMap(disabled))
-                    return@runTransaction RecurringExecutionResult(false, disabled, occurrenceKey)
-                }
                 return@runTransaction RecurringExecutionResult(false, recurring, occurrenceKey)
             }
 
             val transactionId = "${recurring.id}_$occurrenceKey"
             val transactionRef = transactionsRef.document(transactionId)
             val alreadyCreated = transaction.get(transactionRef).exists()
-            val completed = RecurringScheduleCalculator.hasReachedExecutionLimit(recurring, occurrence.index)
             val updatedRecurring = recurring.copy(
-                lastExecutedDate = occurrenceKey,
-                isEnabled = !completed
+                lastExecutedDate = occurrenceKey
             )
             if (!alreadyCreated) {
                 val generated = createTransactionWrite(
@@ -181,7 +189,8 @@ class RecurringTransactionRepositoryImpl(
                 ).getOrThrow()
                 transaction.set(transactionRef, FirestoreWireMapper.transactionToMap(generated))
             }
-            transaction.set(recurringRef, FirestoreWireMapper.recurringToMap(updatedRecurring))
+            // Execution owns only this marker. A concurrent user toggle remains authoritative.
+            transaction.update(recurringRef, mapOf("lastExecutedDate" to occurrenceKey))
             RecurringExecutionResult(!alreadyCreated, updatedRecurring, occurrenceKey)
         }.await() }
         RepositoryResult.Success(result)

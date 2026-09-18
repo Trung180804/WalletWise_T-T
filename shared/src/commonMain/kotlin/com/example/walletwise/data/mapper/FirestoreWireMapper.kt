@@ -173,7 +173,7 @@ object FirestoreWireMapper {
         category = data.string("category", "Hóa đơn"),
         paymentMethod = data.string("paymentMethod", "Tiền mặt"),
         frequency = data.string("frequency", RECURRING_FREQUENCY_MONTHLY),
-        timesCount = data.string("timesCount", "1"),
+        timesCount = data.string("timesCount", com.example.walletwise.domain.model.RECURRING_TIMES_UNLIMITED),
         startDate = data.string("startDate"),
         time = data.string("time", "20:15"),
         note = data.string("note"),

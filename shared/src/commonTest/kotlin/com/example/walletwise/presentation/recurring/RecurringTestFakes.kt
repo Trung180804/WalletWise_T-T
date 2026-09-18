@@ -127,6 +127,7 @@ internal class FakeRecurringRepository(
         recurringId: String,
         isEnabled: Boolean
     ): RepositoryResult<Unit> {
+        toggleGate?.await()
         if (toggleFailure) return RepositoryResult.Failure(fakeError)
         if (userId != sessionUserId) return RepositoryResult.Failure(notAuthenticated())
         rules[recurringId] = rules[recurringId]?.copy(isEnabled = isEnabled)
@@ -134,6 +135,8 @@ internal class FakeRecurringRepository(
         publish(userId)
         return RepositoryResult.Success(Unit)
     }
+
+    var toggleGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     override suspend fun updateLastExecutedDate(
         userId: String,
@@ -173,8 +176,7 @@ internal class FakeRecurringRepository(
         val transactionId = "${recurring.id}_$key"
         val created = transactionIds.add(transactionId)
         val updated = recurring.copy(
-            lastExecutedDate = key,
-            isEnabled = !RecurringScheduleCalculator.hasReachedExecutionLimit(recurring, occurrence.index)
+            lastExecutedDate = key
         )
         rules[recurringId] = updated
         publish(userId)

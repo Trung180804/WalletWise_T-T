@@ -53,6 +53,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -272,7 +274,7 @@ private fun RecurringCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(recurring.title, fontWeight = FontWeight.Bold)
-                Text("${timesLabel(recurring.timesCount)} / ${recurring.frequency} • ${recurring.category}", color = Color.Gray, fontSize = 12.sp)
+                Text("${recurring.frequency} • ${recurring.category}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 Text(
                     "${if (income) "+" else "-"}${formatAmount(recurring.amount)} đ (${recurring.time})",
                     color = color,
@@ -281,7 +283,8 @@ private fun RecurringCard(
                 )
             }
             if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-            else Switch(checked = recurring.isEnabled, onCheckedChange = onToggle)
+            else Switch(checked = recurring.isEnabled, onCheckedChange = onToggle,
+                modifier = Modifier.semantics { contentDescription = "Lịch định kỳ: ${recurring.title}" })
         }
     }
 }
@@ -318,7 +321,7 @@ private fun RecurringDetail(
                     DetailRow("Tên giao dịch", recurring.title)
                     DetailRow("Loại giao dịch", recurring.type)
                     DetailRow("Tần suất", recurring.frequency)
-                    DetailRow("Số lần", timesLabel(recurring.timesCount))
+                    DetailRow("Thời hạn", "Không giới hạn — đến khi bạn tắt")
                     DetailRow("Danh mục", recurring.category)
                     DetailRow("Nguồn tiền", recurring.paymentMethod)
                     DetailRow("Ngày bắt đầu", recurring.startDate)
@@ -416,7 +419,7 @@ private fun RecurringForm(
             Spacer(Modifier.height(12.dp))
             FormInput("Số tiền (đ)", state.amount, onAmountChanged, "0")
             FormChoice("Tần suất", state.frequency) { onOpenPicker(RecurringPicker.FREQUENCY) }
-            FormChoice("Số lần", timesLabel(state.timesCount)) { onOpenPicker(RecurringPicker.TIMES_COUNT) }
+            Text("Không giới hạn — lịch tiếp tục đến khi bạn tắt", color = MaterialTheme.colorScheme.onSurfaceVariant)
             FormChoice("Ngày bắt đầu", state.startDate) { onOpenPicker(RecurringPicker.DATE) }
             FormChoice("Thời gian", state.time) { onOpenPicker(RecurringPicker.TIME) }
             FormChoice("Danh mục", state.category.ifBlank { "Chọn danh mục" }) { onOpenPicker(RecurringPicker.CATEGORY) }
