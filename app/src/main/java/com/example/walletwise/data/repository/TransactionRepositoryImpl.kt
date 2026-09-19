@@ -1,5 +1,6 @@
 package com.example.walletwise.data.repository
 
+import com.example.walletwise.BuildConfig
 import com.example.walletwise.data.image.AndroidTransactionWriter
 import com.example.walletwise.data.image.ContentResolverImageReader
 import com.example.walletwise.data.image.ImgBbImageUploader
@@ -32,10 +33,8 @@ class TransactionRepositoryImpl(
     private val legacyLoader: (suspend (String) -> List<Transaction>)? = null
 ) : TransactionRepository {
 
-    private val IMGBB_API_KEY = "eba44471019a00974a5ce9624bb366cc"
-
     private val imageUploader: ImageUploader by lazy {
-        ImgBbImageUploader(IMGBB_API_KEY)
+        ImgBbImageUploader(BuildConfig.IMGBB_API_KEY)
     }
 
     private val androidWriter by lazy {

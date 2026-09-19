@@ -52,12 +52,7 @@ fun AndroidTransactionList(
         emptyMessage = emptyMessage,
         compactRows = compactRows,
         imageContent = { imageUrl, imageModifier ->
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = "Ảnh giao dịch",
-                modifier = imageModifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            TransactionPhoto(imageUrl, imageModifier.fillMaxSize())
         }
     )
 }

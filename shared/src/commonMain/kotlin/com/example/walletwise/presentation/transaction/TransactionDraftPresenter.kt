@@ -137,6 +137,35 @@ class TransactionDraftPresenter(
         else -> "Đủ thông tin. Đang ghi giao dịch…"
     }
 
+    fun acceptReceiptAutomatically(receipt: ReceiptTransactionDraft) {
+        val current = mutableState.value
+        if (current.isSaving || receipt.transaction.userId != current.userId || current.draft?.id == receipt.transaction.id) return
+        acceptReceipt(receipt)
+        automatic = true
+        lastAutomaticInput = null
+        var draft = validated(receipt.transaction.copy(paymentMethod = receipt.transaction.paymentMethod ?: "Tiền mặt", source = DraftSource.RECEIPT))
+        val uncertain = setOf(DraftField.AMOUNT, DraftField.CATEGORY, DraftField.DATE).filter { (draft.confidence[it] ?: 0f) < 0.8f }.toSet()
+        draft = draft.copy(
+            amount = draft.amount.takeUnless { DraftField.AMOUNT in uncertain || receipt.totalCandidates.size > 1 },
+            category = draft.category.takeUnless { DraftField.CATEGORY in uncertain },
+            timestamp = draft.timestamp.takeUnless { DraftField.DATE in uncertain }
+        )
+        draft = validated(draft)
+        mutableState.value = mutableState.value.copy(draft = draft, message = question(draft))
+        if (draft.missingFields.isEmpty()) confirm()
+    }
+
+    /** Receipt recognition joins the same editable preview and explicit confirmation path. */
+    fun acceptReceipt(receipt: ReceiptTransactionDraft) {
+        val current = mutableState.value
+        if (current.isSaving || receipt.transaction.userId != current.userId) return
+        generation++
+        job?.cancel()
+        mutableState.value = TransactionDraftState(userId = current.userId,
+            draft = receipt.transaction.copy(source = DraftSource.RECEIPT),
+            message = receipt.warning ?: "Đã nhận diện hóa đơn. Hãy kiểm tra và sửa trước khi xác nhận.")
+    }
+
     fun confirm() {
         val current = mutableState.value
         if (current.isSaving || current.isAnalyzing || current.savedDraftId != null) return

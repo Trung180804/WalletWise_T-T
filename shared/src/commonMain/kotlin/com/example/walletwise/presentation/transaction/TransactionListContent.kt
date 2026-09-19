@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
@@ -267,11 +269,7 @@ private fun TransactionImage(
         if (row.hasImage && imageContent != null) {
             imageContent(row.imageUrl, Modifier.fillMaxSize())
         } else {
-            Text(
-                if (row.hasImage) "Có ảnh" else "Không có ảnh",
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            NoTransactionImage(Modifier.fillMaxSize())
         }
     }
 }
@@ -303,7 +301,11 @@ private fun TransactionDetailDialog(
                     }
                 }
                 Spacer(Modifier.height(20.dp))
-                if (row.hasImage) {
+                Column(
+                    Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                if (row.hasImage || imageContent != null) {
                     TransactionImage(row, imageContent, Modifier.fillMaxWidth().height(160.dp))
                     Spacer(Modifier.height(20.dp))
                 }
@@ -324,6 +326,7 @@ private fun TransactionDetailDialog(
                         Spacer(Modifier.height(4.dp))
                         Text(row.note, fontSize = 14.sp)
                     }
+                }
                 }
                 Spacer(Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

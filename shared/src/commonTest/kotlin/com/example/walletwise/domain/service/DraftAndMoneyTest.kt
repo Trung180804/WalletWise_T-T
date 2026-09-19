@@ -95,6 +95,32 @@ class DraftAndMoneyTest {
         assertNull(parser.parse("mua đồ ăn 50k và đổ xăng 50k", "d", "u", DefaultCategories).amount)
         assertEquals(1500000L, parser.parse("mua đồ ăn 1,5tr", "d", "u", DefaultCategories).amount)
     }
+    @Test fun receiptTotalExcludesSubtotalVatTenderedAndChange() {
+        val parser = ReceiptTextParser(DraftTestClock)
+        for (amount in listOf("50.000", "50,000", "50 000", "50.000đ")) {
+            val draft = parser.parse("QUÁN ĂN TEST\n15/09/2026\nSubtotal 40.000\nVAT 10.000\nTotal $amount\nTiền khách đưa 100.000\nTiền thừa 50.000\nTiền mặt", "d", "u", DefaultCategories)
+            assertEquals(50000L, draft.transaction.amount)
+            assertEquals(20260915L, draft.transaction.timestamp)
+            assertEquals("Ăn uống", draft.transaction.category)
+            assertEquals("Tiền mặt", draft.transaction.paymentMethod)
+            assertEquals(listOf(50000L), draft.totalCandidates)
+        }
+    }
+    @Test fun receiptAmbiguousTotalsEmptyNonReceiptAndInvalidDate() {
+        val parser = ReceiptTextParser(DraftTestClock)
+        val ambiguous = parser.parse("TEST\nTổng cộng 50.000\nThanh toán 60.000", "d", "u", DefaultCategories)
+        assertNull(ambiguous.transaction.amount); assertEquals(2, ambiguous.totalCandidates.size)
+        for (raw in listOf("", "Đây là ảnh phong cảnh", "VAT 50.000\nSubtotal 90.000")) {
+            assertNull(parser.parse(raw, "d", "u", DefaultCategories).transaction.amount)
+        }
+        assertNull(parser.parse("TOTAL 50.000\n31/02/2026", "d", "u", DefaultCategories).transaction.timestamp)
+    }
+    @Test fun receiptMerchantMappingOnlyUsesExistingExpenseCategory() {
+        val parser = ReceiptTextParser(DraftTestClock)
+        assertEquals("Y tế", parser.parse("NHÀ THUỐC TEST\nTotal 50.000", "d", "u", DefaultCategories).transaction.category)
+        assertEquals("Mua sắm", parser.parse("SIÊU THỊ TEST\nTotal 50.000", "d", "u", DefaultCategories).transaction.category)
+        assertNull(parser.parse("QUÁN ĂN TEST\nTotal 50.000", "d", "u", emptyList()).transaction.category)
+    }
     @Test fun draftConfirmLocksDuplicateAndRetriesWithSameIdAfterFailure() = runTest {
         var writes = 0
         var fail = true
@@ -133,5 +159,15 @@ class DraftAndMoneyTest {
         presenter.setUserId("b"); gate.complete(Unit); runCurrent()
         assertNull(presenter.state.value.draft); assertEquals("b", presenter.state.value.userId)
         presenter.close(); assertNull(presenter.state.value.userId)
+    }
+    @Test fun ocrErrorPermissionDeniedAndLateDisposeAreSafe() = runTest {
+        val gate = CompletableDeferred<String>()
+        val presenter = ReceiptDraftPresenter(this, ReceiptOcrEngine { withContext(NonCancellable) { gate.await() } }, ReceiptTextParser(DraftTestClock), MutableStateFlow(DefaultCategories))
+        presenter.setUserId("u"); presenter.permissionDenied(); assertNotNull(presenter.state.value.error)
+        presenter.analyze("image"); runCurrent(); presenter.close(); gate.complete("TOTAL 50.000"); runCurrent()
+        assertNull(presenter.state.value.draft); assertNull(presenter.state.value.userId)
+        val failed = ReceiptDraftPresenter(this, ReceiptOcrEngine { error("OCR") }, ReceiptTextParser(DraftTestClock), MutableStateFlow(DefaultCategories))
+        failed.setUserId("u"); failed.analyze("image"); runCurrent()
+        assertNotNull(failed.state.value.error); assertFalse(failed.state.value.isRecognizing); failed.close()
     }
 }

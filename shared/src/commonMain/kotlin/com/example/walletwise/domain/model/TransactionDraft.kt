@@ -3,7 +3,7 @@ package com.example.walletwise.domain.model
 import com.example.walletwise.foundation.randomUuidString
 
 enum class DraftField { AMOUNT, TYPE, CATEGORY, DATE, PAYMENT_METHOD }
-enum class DraftSource { TEXT, VOICE, MANUAL }
+enum class DraftSource { TEXT, VOICE, RECEIPT, MANUAL }
 
 data class TransactionDraft(
     val id: String = randomUuidString(),
@@ -24,3 +24,11 @@ data class TransactionDraft(
             money.toDouble(), category ?: return null, note, timestamp ?: return null)
     }
 }
+
+data class ReceiptTransactionDraft(
+    val transaction: TransactionDraft,
+    val merchant: String? = null,
+    val totalCandidates: List<Long> = emptyList(),
+    val lineItems: List<String> = emptyList(),
+    val warning: String? = null
+)

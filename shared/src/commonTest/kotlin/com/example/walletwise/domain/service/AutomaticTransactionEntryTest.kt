@@ -76,6 +76,19 @@ class AutomaticTransactionEntryTest {
         presenter.submitAutomatically("50 nghìn"); runCurrent(); assertEquals(0, writes)
         presenter.submitAutomatically("Ăn uống"); runCurrent(); assertEquals(1, writes); presenter.close()
     }
+    @Test fun highConfidenceReceiptSavesOnceAndAmbiguousReceiptAsks() = runTest {
+        val writes = mutableListOf<Transaction>()
+        val presenter = TransactionDraftPresenter(this, analyzer, MutableStateFlow(DefaultCategories), { writes += it; Result.success(true) })
+        presenter.setUserId("u")
+        val parser = ReceiptTextParser(DraftTestClock)
+        val certain = parser.parse("QUAN AN TEST\n17/09/2026\nTong cong 50.000", "receipt", "u", DefaultCategories)
+        presenter.acceptReceiptAutomatically(certain); presenter.acceptReceiptAutomatically(certain); runCurrent()
+        assertEquals(1, writes.size); assertEquals("receipt", writes.single().id)
+        val uncertain = parser.parse("QUAN AN TEST\n17/09/2026\nTong cong 50.000\nThanh toan 100.000", "uncertain", "u", DefaultCategories)
+        presenter.acceptReceiptAutomatically(uncertain); runCurrent(); assertEquals(1, writes.size)
+        presenter.edit(presenter.state.value.draft!!.copy(amount = 100000L)); runCurrent()
+        assertEquals(2, writes.size); assertEquals(100000.0, writes.last().amount); presenter.close()
+    }
     @Test fun failedAcknowledgementAndRetryKeepOneStableId() = runTest {
         val ids = mutableListOf<String>(); var acknowledged = false
         val presenter = TransactionDraftPresenter(this, analyzer, MutableStateFlow(DefaultCategories), { ids += it.id; Result.success(acknowledged) })
@@ -83,5 +96,14 @@ class AutomaticTransactionEntryTest {
         assertNull(presenter.state.value.savedDraftId); assertTrue(presenter.state.value.message.contains("Chưa nhận"))
         acknowledged = true; presenter.submitAutomatically("mua đồ ăn 50k"); runCurrent()
         assertEquals(2, ids.size); assertEquals(1, ids.distinct().size); assertNotNull(presenter.state.value.savedDraftId); presenter.close()
+    }
+    @Test fun missingReceiptDateIsNotInventedWhenAnsweringAnotherField() = runTest {
+        var writes = 0
+        val presenter = TransactionDraftPresenter(this, analyzer, MutableStateFlow(DefaultCategories), { writes++; Result.success(true) })
+        presenter.setUserId("u")
+        val receipt = ReceiptTextParser(DraftTestClock).parse("QUAN AN TEST\nTong cong 50.000\nThanh toan 100.000", "r", "u", DefaultCategories)
+        presenter.acceptReceiptAutomatically(receipt); presenter.submitAutomatically("50 nghìn"); runCurrent()
+        assertEquals(0, writes); assertNull(presenter.state.value.draft?.timestamp)
+        presenter.submitAutomatically("17/09/2026"); runCurrent(); assertEquals(1, writes); presenter.close()
     }
 }
