@@ -459,61 +459,11 @@ fun HomeScreen(
             ModalBottomSheet(
                 onDismissRequest = { showAIModal = false; viewModel.resetAIState() },
                 sheetState = sheetState,
-                containerColor = cardColor
+                containerColor = Color.White,
+                contentColor = Color(0xFF25232A),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp, start = 16.dp, end = 16.dp).imePadding()) {
-                    Text(text = "✨ Trợ lý Tài chính WalletWise", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (viewModel.isAIProcessing) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = cyanColor)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = "Trợ lý đang suy nghĩ...", color = subTextColor)
-                        }
-                    } else {
-                        Text(text = viewModel.aiFeedbackMessage, fontSize = 16.sp, color = Color(0xFFFA3B70), fontWeight = FontWeight.Medium)
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (viewModel.aiPendingTransaction != null) {
-                        val tx = viewModel.aiPendingTransaction!!
-                        val context = LocalContext.current
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = cyanColor.copy(alpha = 0.1f),
-                            border = BorderStroke(1.dp, cyanColor.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = "📝 Giao dịch mới:", fontWeight = FontWeight.Bold, color = textColor)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(text = "• Số tiền: ${formatMoney.format(tx.amount)}", color = textColor)
-                                Text(text = "• Phân loại: ${tx.category} (${tx.type})", color = textColor)
-                                Text(text = "• Nguồn: ${tx.paymentMethod}", color = textColor)
-                                Text(text = "• Ghi chú: ${tx.note}", color = textColor)
-
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.addTransaction(
-                                            amount = tx.amount, type = tx.type, category = tx.category,
-                                            note = tx.note, paymentMethod = tx.paymentMethod, imageUri = null, context = context
-                                        ) { showAIModal = false; viewModel.resetAIState() }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                                ) {
-                                    Text(text = "Xác nhận & Lưu", color = Color.White, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    AIAssistantInputBar(textColor = textColor, onSend = { userInput -> viewModel.processAITransaction(userInput) })
-                }
+                MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFFFA3B70))) { AITransactionSheet(viewModel) }
             }
         }
 
@@ -532,44 +482,6 @@ fun HomeScreen(
                     TextButton(onClick = { showLogoutDialog = false }) { Text(text = "Hủy", color = subTextColor, fontWeight = FontWeight.Bold) }
                 }
             )
-        }
-    }
-}
-
-@Composable
-fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
-    var textInput by remember { mutableStateOf(TextFieldValue("")) }
-    val context = LocalContext.current
-    val speechLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (spokenText != null) { textInput = TextFieldValue(spokenText) }
-        }
-    }
-    fun startListening() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Đang nghe... (VD: Đổ xăng 50k)")
-        }
-        try { speechLauncher.launch(intent) } catch (e: Exception) { android.widget.Toast.makeText(context, "Thiết bị không hỗ trợ giọng nói", android.widget.Toast.LENGTH_SHORT).show() }
-    }
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = textInput, onValueChange = { textInput = it }, modifier = Modifier.weight(1f),
-            placeholder = { Text(text = "Nhập nội dung...", color = Color.Gray) }, shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFF9C27B0),
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                focusedTextColor = textColor,
-                unfocusedTextColor = textColor
-            ), maxLines = 4
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        if (textInput.text.isBlank()) {
-            IconButton(onClick = { startListening() }, modifier = Modifier.size(50.dp).background(Color(0xFFFA3B70), CircleShape)) { Icon(Icons.Default.Mic, contentDescription = "Mic", tint = Color.White) }
-        } else {
-            IconButton(onClick = { onSend(textInput.text); textInput = TextFieldValue("") }, modifier = Modifier.size(50.dp).background(Color(0xFF4CAF50), CircleShape)) { Icon(Icons.Default.Send, contentDescription = "Gửi", tint = Color.White) }
         }
     }
 }

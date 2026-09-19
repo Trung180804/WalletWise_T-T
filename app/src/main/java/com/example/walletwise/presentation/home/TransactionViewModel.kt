@@ -164,10 +164,23 @@ class TransactionViewModel(
     var transactionToEdit by mutableStateOf<Transaction?>(null)
 
     // CÁC BIẾN TRẠNG THÁI CHO TRỢ LÝ AI
-    val aiAssistant = TransactionAIAssistant()
-    var isAIProcessing by mutableStateOf(false)
-    var aiFeedbackMessage by mutableStateOf("Xin chào! Bạn vừa chi tiêu gì vậy?")
-    var aiPendingTransaction by mutableStateOf<Transaction?>(null)
+    private val draftPresenter = com.example.walletwise.presentation.transaction.TransactionDraftPresenter(
+        viewModelScope,
+        com.example.walletwise.domain.service.LocalTransactionTextAnalyzer(com.example.walletwise.data.draft.AndroidDraftDateTimeProvider()),
+        categories,
+        { transaction ->
+            val result = this.transactionWriter.add(transaction, null, getApplicationContextForDraft())
+            if (result.getOrNull() == true && auth.currentUser?.uid == transaction.userId) calculateAndGetStreak()
+            result
+        }
+    )
+    val aiDraftState = draftPresenter.state
+    private var draftContext: Context? = null
+    fun attachDraftContext(context: Context) { draftContext = context.applicationContext }
+    private fun getApplicationContextForDraft(): Context = requireNotNull(draftContext)
+    fun editAIDraft(draft: com.example.walletwise.domain.model.TransactionDraft) = draftPresenter.edit(draft)
+    fun confirmAIDraft() = draftPresenter.confirm()
+    fun newAIDraft() = draftPresenter.newDraft()
 
     init {
         viewModelScope.launch {
@@ -182,6 +195,7 @@ class TransactionViewModel(
         refreshBudgetSession()
 
         authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            draftPresenter.setUserId(firebaseAuth.currentUser?.uid)
             if (firebaseAuth.currentUser != null) {
                 loadTransactions()
                 checkCurrentStreakStatus()
@@ -428,62 +442,12 @@ class TransactionViewModel(
         )
     }
 
-    fun processAITransaction(userInput: String) {
-        viewModelScope.launch {
-            isAIProcessing = true
-            aiFeedbackMessage = "Đang suy nghĩ..."
-            aiPendingTransaction = null
-
-            val jsonString = aiAssistant.analyzeTransactionText(userInput)
-
-            if (jsonString != null) {
-                try {
-                    val cleanJson = jsonString.replace("```json", "").replace("```", "").trim()
-                    val jsonObject = JSONObject(cleanJson)
-                    val missingPrompt = jsonObject.optString("missing_prompt", "")
-
-                    if (missingPrompt.isNotEmpty()) {
-                        aiFeedbackMessage = missingPrompt
-                    } else {
-                        val amount = jsonObject.optDouble("amount", 0.0)
-                        val category = jsonObject.optString("category", "Khác")
-                        val type = jsonObject.optString("type", "Chi")
-                        val paymentMethod = jsonObject.optString("paymentMethod", "Tiền mặt")
-                        val note = jsonObject.optString("note", "")
-
-                        aiPendingTransaction = Transaction(
-                            amount = amount,
-                            category = category,
-                            type = type,
-                            paymentMethod = paymentMethod,
-                            note = note,
-                            timestamp = System.currentTimeMillis()
-                        )
-                        aiFeedbackMessage = "Tôi đã phân tích xong. Bạn xem thông tin đã chính xác chưa nhé!"
-                    }
-                } catch (e: Exception) {
-                    val errorMessage = e.message ?: ""
-                    if (errorMessage.contains("high demand") || errorMessage.contains("503")) {
-                        aiFeedbackMessage = "AI đang có quá nhiều người sử dụng. Bạn vui lòng thử lại sau vài phút nhé!"
-                    } else if (errorMessage.contains("Quota") || errorMessage.contains("limit")) {
-                        aiFeedbackMessage = "Đã hết lượt sử dụng AI miễn phí hôm nay."
-                    } else {
-                        aiFeedbackMessage = "Xin lỗi, tôi chưa hiểu rõ. Bạn nói lại cụ thể khoản tiền và mục đích nhé!"
-                    }
-                    e.printStackTrace()
-                }
-            } else {
-                aiFeedbackMessage = "Lỗi kết nối AI. Vui lòng thử lại!"
-            }
-            isAIProcessing = false
-        }
+    fun processAITransaction(userInput: String, source: com.example.walletwise.domain.model.DraftSource = com.example.walletwise.domain.model.DraftSource.TEXT) {
+        draftPresenter.setUserId(auth.currentUser?.uid)
+        draftPresenter.submitAutomatically(userInput, source)
     }
 
-    fun resetAIState() {
-        aiFeedbackMessage = "Xin chào! Bạn vừa chi tiêu gì vậy?"
-        aiPendingTransaction = null
-    }
-
+    fun resetAIState() { draftPresenter.cancelAnalysis() }
     fun addTransaction(
         amount: Double,
         type: String,
@@ -627,6 +591,7 @@ class TransactionViewModel(
         reminderSessionController.close()
         recurringSessionController.close()
         authStateListener?.let(auth::removeAuthStateListener)
+        draftPresenter.close()
         super.onCleared()
     }
 
