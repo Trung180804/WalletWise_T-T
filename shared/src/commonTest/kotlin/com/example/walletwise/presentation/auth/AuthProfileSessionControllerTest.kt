@@ -29,6 +29,40 @@ import kotlin.test.assertNull
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthProfileSessionControllerTest {
     @Test
+    fun missingProfileWithoutCreationUsesDefaultsAndOneListener() = runTest {
+        val auth = CountingAuthRepository()
+        val users = CountingUserRepository(null)
+        val controller = controller(this, auth, users)
+        controller.observeProfile(auth.session, ensureExists = false)
+        runCurrent()
+        assertEquals("uid", controller.state.value.profile?.id)
+        assertEquals("User", controller.state.value.profile?.username)
+        assertEquals(1, users.observeCalls)
+        controller.close()
+    }
+
+    @Test
+    fun uidChangeAndDisposeRejectLateProfileLoads() = runTest {
+        val auth = CountingAuthRepository()
+        val users = CountingUserRepository(null)
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        users.getGate = gate
+        val controller = controller(this, auth, users)
+        controller.observeProfile(auth.session)
+        runCurrent()
+        controller.observeProfile(AuthSession("other", "b@example.com", "B"), ensureExists = false)
+        runCurrent()
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals("other", controller.state.value.profile?.id)
+        assertEquals(1, users.activeCollectors)
+        controller.close()
+        runCurrent()
+        assertNull(controller.state.value.profile)
+        assertEquals(0, users.activeCollectors)
+    }
+
+    @Test
     fun repeatedStartAndProfileLoad_doNotCreateDuplicateListeners() = runTest {
         val auth = CountingAuthRepository()
         val users = CountingUserRepository(User("uid", "user@example.com", "User"))
@@ -104,8 +138,12 @@ private class CountingUserRepository(initial: User?) : UserRepository {
     private val state = MutableStateFlow<RepositoryResult<User?>>(RepositoryResult.Success(initial))
     var observeCalls = 0
     var activeCollectors = 0
+    var getGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
-    override suspend fun getUser(userId: String): RepositoryResult<User?> = state.value
+    override suspend fun getUser(userId: String): RepositoryResult<User?> {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { getGate?.await() }
+        return state.value
+    }
     override suspend fun createUserIfMissing(defaultUser: User): RepositoryResult<User> {
         state.value = RepositoryResult.Success(defaultUser)
         return RepositoryResult.Success(defaultUser)

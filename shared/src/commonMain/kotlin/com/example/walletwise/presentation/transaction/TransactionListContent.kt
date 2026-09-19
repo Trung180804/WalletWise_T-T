@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -60,6 +63,8 @@ fun TransactionListContent(
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
+    emptyMessage: String = "Không có giao dịch nào.",
+    compactRows: Boolean = false,
     imageContent: TransactionImageContent? = null
 ) {
     var selectedRow by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
@@ -72,7 +77,7 @@ fun TransactionListContent(
             onRetry = onRetry,
             modifier = modifier
         )
-        state.rows.isEmpty() -> TransactionEmpty(modifier)
+        state.rows.isEmpty() -> TransactionEmpty(emptyMessage, modifier)
         else -> Column(modifier = modifier) {
             state.repositoryError?.let { error ->
                 Text(
@@ -82,7 +87,20 @@ fun TransactionListContent(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            LazyVerticalGrid(
+            if (compactRows) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listItems(state.rows, key = TransactionRowViewData::id) { row ->
+                        CompactTransactionRow(row) {
+                            selectedRow = row
+                            onRowSelected(row.id)
+                        }
+                    }
+                }
+            } else LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 100.dp),
@@ -143,6 +161,23 @@ fun TransactionListContent(
 }
 
 @Composable
+private fun CompactTransactionRow(row: TransactionRowViewData, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(row.category.ifBlank { row.type }, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(row.amountText, fontWeight = FontWeight.Bold,
+                    color = if (row.isIncome) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error)
+            }
+            if (row.note.isNotBlank()) Text(row.note, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${row.fullDateText} • ${row.paymentMethod}", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
 private fun TransactionLoading(modifier: Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
@@ -150,9 +185,9 @@ private fun TransactionLoading(modifier: Modifier) {
 }
 
 @Composable
-private fun TransactionEmpty(modifier: Modifier) {
+private fun TransactionEmpty(message: String, modifier: Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Không có giao dịch nào.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

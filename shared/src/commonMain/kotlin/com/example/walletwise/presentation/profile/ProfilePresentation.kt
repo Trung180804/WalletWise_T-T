@@ -3,6 +3,7 @@ package com.example.walletwise.presentation.profile
 import com.example.walletwise.domain.model.ChangePasswordInput
 import com.example.walletwise.domain.model.ImageUpload
 import com.example.walletwise.domain.model.UserProfileUpdate
+import com.example.walletwise.domain.model.defaultUser
 import com.example.walletwise.domain.result.AuthUseCaseResult
 import com.example.walletwise.domain.usecase.auth.ChangePasswordUseCase
 import com.example.walletwise.domain.usecase.profile.UpdateAvatarUseCase
@@ -16,9 +17,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 sealed interface ProfileLoadState {
     data object Loading : ProfileLoadState
+    data object Empty : ProfileLoadState
     data object Data : ProfileLoadState
     data class Error(val message: String) : ProfileLoadState
 }
@@ -114,6 +118,8 @@ class ProfileUiPresenter(
     val state: StateFlow<ProfileUiState> = _state.asStateFlow()
 
     private var nextEventId = 0L
+    private var sessionGeneration = 0L
+    private var activeUserId: String? = null
     private var profileUpdateJob: Job? = null
     private var avatarUploadJob: Job? = null
     private var passwordUpdateJob: Job? = null
@@ -156,12 +162,16 @@ class ProfileUiPresenter(
         }
 
         _state.value = snapshot.copy(isUpdatingProfile = true)
+        val generation = sessionGeneration
         profileUpdateJob = scope.launch {
             when (
                 val result = updateProfile(
                     snapshot.userId,
                     UserProfileUpdate(username = normalizedName)
-                )
+                ).also {
+                    coroutineContext.ensureActive()
+                    if (generation != sessionGeneration) return@launch
+                }
             ) {
                 is AuthUseCaseResult.Success -> {
                     _state.value = _state.value.copy(
@@ -211,12 +221,16 @@ class ProfileUiPresenter(
         }
 
         _state.value = snapshot.copy(isUpdatingProfile = true)
+        val generation = sessionGeneration
         profileUpdateJob = scope.launch {
             when (
                 val result = updateProfile(
                     snapshot.userId,
                     UserProfileUpdate(gender = value)
-                )
+                ).also {
+                    coroutineContext.ensureActive()
+                    if (generation != sessionGeneration) return@launch
+                }
             ) {
                 is AuthUseCaseResult.Success -> {
                     _state.value = _state.value.copy(
@@ -252,13 +266,17 @@ class ProfileUiPresenter(
         }
 
         _state.value = snapshot.copy(isUploadingAvatar = true)
+        val generation = sessionGeneration
         avatarUploadJob = scope.launch {
             when (
                 val result = updateAvatar(
                     userId = snapshot.userId,
                     previousAvatarUrl = snapshot.avatarUrl,
                     image = image
-                )
+                ).also {
+                    coroutineContext.ensureActive()
+                    if (generation != sessionGeneration) return@launch
+                }
             ) {
                 is AuthUseCaseResult.Success -> {
                     _state.value = _state.value.copy(
@@ -338,6 +356,7 @@ class ProfileUiPresenter(
         }
 
         _state.value = snapshot.copy(passwordEditor = editor.copy(isSubmitting = true))
+        val generation = sessionGeneration
         passwordUpdateJob = scope.launch {
             when (
                 val result = changePassword(
@@ -346,7 +365,10 @@ class ProfileUiPresenter(
                         newPassword = editor.newPassword,
                         confirmPassword = editor.confirmation
                     )
-                )
+                ).also {
+                    coroutineContext.ensureActive()
+                    if (generation != sessionGeneration) return@launch
+                }
             ) {
                 is AuthUseCaseResult.Success -> {
                     _state.value = _state.value.copy(passwordEditor = null)
@@ -403,13 +425,24 @@ class ProfileUiPresenter(
     }
 
     fun close() {
+        sessionGeneration++
         profileUpdateJob?.cancel()
         avatarUploadJob?.cancel()
         passwordUpdateJob?.cancel()
         profileStateJob.cancel()
+        _state.value = ProfileUiState()
     }
 
     private fun applyProfileState(commonState: AuthProfileUiState) {
+        val session = (commonState.authStatus as? AuthStatus.Authenticated)?.session
+        if (activeUserId != session?.userId) {
+            sessionGeneration++
+            activeUserId = session?.userId
+            profileUpdateJob?.cancel()
+            avatarUploadJob?.cancel()
+            passwordUpdateJob?.cancel()
+            _state.value = ProfileUiState()
+        }
         if (commonState.authStatus is AuthStatus.Unauthenticated) {
             profileUpdateJob?.cancel()
             profileUpdateJob = null
@@ -426,7 +459,7 @@ class ProfileUiPresenter(
             return
         }
 
-        val profile = commonState.profile
+        val profile = commonState.profile ?: session?.defaultUser()
         val loadState = when (commonState.authStatus) {
             AuthStatus.Loading -> ProfileLoadState.Loading
             AuthStatus.Unauthenticated -> ProfileLoadState.Data
@@ -435,8 +468,8 @@ class ProfileUiPresenter(
                     ProfileLoadState.Error(commonState.operation.message)
                 commonState.operation is AuthOperationState.RepositoryError ->
                     ProfileLoadState.Error(commonState.operation.message)
-                profile != null -> ProfileLoadState.Data
-                else -> ProfileLoadState.Loading
+                commonState.profile != null -> ProfileLoadState.Data
+                else -> ProfileLoadState.Empty
             }
         }
         val isLoggedIn = commonState.authStatus is AuthStatus.Authenticated

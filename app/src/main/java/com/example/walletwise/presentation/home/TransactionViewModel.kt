@@ -53,7 +53,6 @@ import com.example.walletwise.utils.AndroidRecurringPlatform
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuth.AuthStateListener
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,9 +97,6 @@ class TransactionViewModel(
         dateTimeProvider = transactionDateTimeProvider
     )
     val transactionListState = transactionListPresenter.state
-
-    private val _userProfile = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
-    val userProfile: StateFlow<com.example.walletwise.domain.model.User?> = _userProfile.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -162,7 +158,6 @@ class TransactionViewModel(
 
     // Keep one listener per source. Re-registering these on every auth update
     // causes duplicate background work and can amplify a Firebase failure.
-    private var profileListener: ListenerRegistration? = null
     private var authStateListener: AuthStateListener? = null
 
     // Biến lưu trữ giao dịch đang được chọn để Sửa
@@ -179,7 +174,6 @@ class TransactionViewModel(
             categorySessionState.collect { _categories.value = it.categories }
         }
         loadTransactions()
-        loadUserProfile()
         checkAndGenerateFakeData()
         checkCurrentStreakStatus()
         fetchCategories()
@@ -190,7 +184,6 @@ class TransactionViewModel(
         authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             if (firebaseAuth.currentUser != null) {
                 loadTransactions()
-                loadUserProfile()
                 checkCurrentStreakStatus()
                 fetchCategories()
                 fetchReminders()
@@ -385,10 +378,13 @@ class TransactionViewModel(
                 } else {
                     null
                 },
-                sortOrder = TransactionListSortOrder.NEWEST_FIRST
+                sortOrder = TransactionListSortOrder.NEWEST_FIRST,
+                searchQuery = transactionListState.value.filters.searchQuery
             )
         )
     }
+
+    fun updateTransactionSearchQuery(query: String) = transactionListPresenter.updateSearchQuery(query)
 
     fun refreshTransactionList() = transactionSessionController.refresh()
 
@@ -561,25 +557,6 @@ class TransactionViewModel(
         }
     }
 
-    fun loadUserProfile() {
-        val uid = auth.currentUser?.uid ?: return
-        profileListener?.remove()
-        profileListener = db.collection("users").document(uid)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("FIRESTORE_ERROR", "Unable to listen to user profile", error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    _userProfile.value = runCatching {
-                        snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
-                    }.onFailure {
-                        Log.e("FIRESTORE_ERROR", "Ignoring invalid user profile", it)
-                    }.getOrNull()
-                }
-            }
-    }
-
     private fun fetchCategories() {
         categorySessionController.setUserId(auth.currentUser?.uid)
     }
@@ -643,7 +620,6 @@ class TransactionViewModel(
     }
 
     override fun onCleared() {
-        profileListener?.remove()
         transactionListPresenter.close()
         transactionSessionController.close()
         categorySessionController.close()

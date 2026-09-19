@@ -31,7 +31,8 @@ data class TransactionListFilterState(
     val type: TransactionTypeFilter = TransactionTypeFilter.ALL,
     val paymentMethod: String? = null,
     val dateRange: TransactionDateRange? = null,
-    val sortOrder: TransactionListSortOrder = TransactionListSortOrder.NEWEST_FIRST
+    val sortOrder: TransactionListSortOrder = TransactionListSortOrder.NEWEST_FIRST,
+    val searchQuery: String = ""
 )
 
 data class TransactionLocalDateTime(
@@ -51,6 +52,7 @@ data class TransactionRowViewData(
     val id: String,
     val type: String,
     val isIncome: Boolean,
+    val rawAmountText: String,
     val amountText: String,
     val category: String,
     val paymentMethod: String,
@@ -91,16 +93,31 @@ class TransactionListPresenter(
     val state: StateFlow<TransactionListUiState> = mutableState.asStateFlow()
     private val sourceJob: Job
     private var nextEventId = 1L
+    private var observedUserId: String? = null
 
     init {
         sourceJob = scope.launch {
             combine(sessionState, mutableFilters) { session, filters -> session to filters }
-                .collect { (session, filters) -> publish(session, filters) }
+                .collect { (session, filters) ->
+                    if (observedUserId != session.userId) {
+                        observedUserId = session.userId
+                        if (filters.searchQuery.isNotEmpty()) {
+                            mutableFilters.value = filters.copy(searchQuery = "")
+                            publish(session, mutableFilters.value)
+                            return@collect
+                        }
+                    }
+                    publish(session, filters)
+                }
         }
     }
 
     fun updateFilters(filters: TransactionListFilterState) {
         mutableFilters.value = filters
+    }
+
+    fun updateSearchQuery(query: String) {
+        mutableFilters.value = mutableFilters.value.copy(searchQuery = query.trimStart())
     }
 
     fun onRowSelected(transactionId: String) = emitForExisting(transactionId) {
@@ -142,11 +159,15 @@ class TransactionListPresenter(
                     )
                 }
             }
+        val normalizedQuery = normalizeVietnameseSearchText(filters.searchQuery.trim())
+        val rows = filtered.map(::toRow).filter { row ->
+            normalizedQuery.isEmpty() || row.searchableText().contains(normalizedQuery)
+        }
         val current = mutableState.value
         mutableState.value = TransactionListUiState(
             userId = session.userId,
             isLoading = session.isLoading,
-            rows = filtered.map(::toRow),
+            rows = rows,
             repositoryError = session.error,
             filters = filters,
             pendingEvent = current.pendingEvent.takeIf { current.userId == session.userId }
@@ -163,6 +184,7 @@ class TransactionListPresenter(
             id = transaction.id,
             type = transaction.type,
             isIncome = transaction.isIncome(),
+            rawAmountText = transaction.amount.toString(),
             amountText = formatTransactionAmount(transaction.amount, transaction.type),
             category = transaction.category,
             paymentMethod = transaction.paymentMethod,
@@ -186,6 +208,11 @@ class TransactionListPresenter(
         )
     }
 }
+
+private fun TransactionRowViewData.searchableText(): String = normalizeVietnameseSearchText(
+    listOf(type, category, paymentMethod, note, rawAmountText, amountText,
+        amountText.filter(Char::isDigit), fullDateText).joinToString(" ")
+)
 
 fun formatTransactionAmount(amount: Double, type: String): String {
     val safeAmount = if (amount.isFinite()) round(amount.absoluteValue).toLong() else 0L

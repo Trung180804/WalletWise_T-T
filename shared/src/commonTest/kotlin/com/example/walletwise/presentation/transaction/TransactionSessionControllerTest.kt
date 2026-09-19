@@ -42,6 +42,25 @@ class TransactionSessionControllerTest {
         presenter.close(); controller.close()
     }
     @Test
+    fun searchPresenterUsesTheExistingTransactionCollector() = runTest {
+        val repository = SessionTransactionRepository()
+        val controller = TransactionSessionController(this, repository)
+        val presenter = TransactionListPresenter(this, controller.state, object : TransactionDateTimeProvider {
+            override fun localDateTime(epochMilliseconds: Long) = null
+        })
+        controller.setUserId("user-a")
+        advanceUntilIdle()
+        repository.emit("user-a", success(tx("one", "user-a", 10L)))
+        advanceUntilIdle()
+        presenter.updateSearchQuery("chi")
+        presenter.updateSearchQuery("one")
+        advanceUntilIdle()
+        assertEquals(1, repository.observeCount["user-a"])
+        controller.close()
+        presenter.close()
+    }
+
+    @Test
     fun sameUidKeepsOneCollector_andLogoutClearsUserData() = runTest {
         val repository = SessionTransactionRepository()
         val controller = TransactionSessionController(this, repository)
