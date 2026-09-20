@@ -17,6 +17,75 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransactionListPresenterTest {
     @Test
+    fun largeAmountsMatchPlainDigitsEvenWhenDoubleUsesScientificNotation() = runTest {
+        val session = MutableStateFlow(TransactionSessionState(userId = "uid", transactions = listOf(
+            Transaction("large", "uid", "Thu", "Tiền mặt", 10_000_000.0, "Lương", "", 20L)
+        )))
+        val presenter = TransactionListPresenter(this, session, FixedTransactionDateTimeProvider)
+        advanceUntilIdle()
+        listOf("10000000", "10.000.000").forEach { query ->
+            presenter.updateSearchQuery(query)
+            advanceUntilIdle()
+            assertEquals(listOf("large"), presenter.state.value.rows.map { it.id })
+        }
+        presenter.close()
+    }
+
+    @Test
+    fun searchIsTrimmedCaseAndAccentInsensitive_acrossFieldsAndLiveUpdates() = runTest {
+        val session = MutableStateFlow(
+            TransactionSessionState(
+                userId = "user-1",
+                transactions = listOf(
+                    Transaction("meal", "user-1", "Chi", "Tiền mặt", 100_000.0, "Ăn uống", "Ăn sáng", 20L),
+                    Transaction("salary", "user-1", "Thu", "Chuyển khoản", 5_000_000.0, "Lương", "Tháng 9", 10L)
+                )
+            )
+        )
+        val presenter = TransactionListPresenter(this, session, FixedTransactionDateTimeProvider)
+        advanceUntilIdle()
+        assertEquals(listOf("meal", "salary"), presenter.state.value.rows.map { it.id })
+
+        fun search(query: String, expected: List<String>) {
+            presenter.updateSearchQuery(query)
+            advanceUntilIdle()
+            assertEquals(expected, presenter.state.value.rows.map { it.id })
+        }
+        search("  AN SANG", listOf("meal"))
+        search("  an sang  ", listOf("meal"))
+        search("A\u0306n sa\u0301ng", listOf("meal"))
+        search("an uong", listOf("meal"))
+        search("chi", listOf("meal"))
+        search("THU", listOf("salary"))
+        search("chuyen khoan", listOf("salary"))
+        search("100000", listOf("meal"))
+        search("100.000", listOf("meal"))
+        search("  ", listOf("meal", "salary"))
+        search("09/09/2026", listOf("meal", "salary"))
+        search("không tồn tại", emptyList())
+
+        presenter.updateSearchQuery("thuong")
+        session.value = session.value.copy(
+            transactions = session.value.transactions +
+                Transaction("bonus", "user-1", "Thu", "Tiền mặt", 200_000.0, "Thưởng", "", 30L)
+        )
+        advanceUntilIdle()
+        assertEquals(listOf("bonus"), presenter.state.value.rows.map { it.id })
+
+        session.value = TransactionSessionState(userId = "user-2", transactions = emptyList())
+        advanceUntilIdle()
+        assertEquals("", presenter.state.value.filters.searchQuery)
+        assertTrue(presenter.state.value.rows.isEmpty())
+        presenter.updateSearchQuery("old query")
+        advanceUntilIdle()
+        session.value = TransactionSessionState()
+        advanceUntilIdle()
+        assertEquals("", presenter.state.value.filters.searchQuery)
+        assertTrue(presenter.state.value.rows.isEmpty())
+        presenter.close()
+    }
+
+    @Test
     fun loadingEmptyErrorAndData_areMappedFromTheSharedSession() = runTest {
         val session = MutableStateFlow(TransactionSessionState(userId = "user-1", isLoading = true))
         val presenter = TransactionListPresenter(this, session, FixedTransactionDateTimeProvider)

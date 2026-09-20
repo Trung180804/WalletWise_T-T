@@ -39,6 +39,59 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileUiPresenterTest {
     @Test
+    fun authenticatedMissingProfileShowsSafeEmptyDefaults() = runTest {
+        val fixture = fixture(AuthProfileUiState(authStatus = AuthStatus.Authenticated(session)))
+        runCurrent()
+        assertIs<ProfileLoadState.Empty>(fixture.presenter.state.value.loadState)
+        assertEquals(session.userId, fixture.presenter.state.value.userId)
+        assertEquals("Wallet User", fixture.presenter.state.value.username)
+        assertEquals("", fixture.presenter.state.value.avatarUrl)
+    }
+
+    @Test
+    fun uidChangeCancelsEditorsAndRejectsLateUpdateEvenIfRepositoryIgnoresCancellation() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val fixture = fixture(authenticatedState()).apply {
+            userRepository.updateGate = gate
+            userRepository.ignoreCancellation = true
+        }
+        runCurrent()
+        fixture.presenter.openNameEditor()
+        fixture.presenter.onNameChanged("Old session draft")
+        fixture.presenter.submitName()
+        runCurrent()
+        fixture.profileState.value = AuthProfileUiState(
+            authStatus = AuthStatus.Authenticated(AuthSession("user-2", "b@example.com")),
+            profile = User("user-2", "b@example.com", "User B")
+        )
+        runCurrent()
+        assertNull(fixture.presenter.state.value.nameDraft)
+        assertFalse(fixture.presenter.state.value.isUpdatingProfile)
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals("User B", fixture.presenter.state.value.username)
+        assertNull(fixture.presenter.state.value.pendingEvent)
+    }
+
+    @Test
+    fun disposeRejectsLateUpdateAndClearsState() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val fixture = fixture(authenticatedState()).apply {
+            userRepository.updateGate = gate
+            userRepository.ignoreCancellation = true
+        }
+        runCurrent()
+        fixture.presenter.openNameEditor()
+        fixture.presenter.onNameChanged("Late")
+        fixture.presenter.submitName()
+        runCurrent()
+        fixture.presenter.close()
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(ProfileUiState(), fixture.presenter.state.value)
+    }
+
+    @Test
     fun profileLoadingErrorAndData_areMappedFromSessionState() = runTest {
         val fixture = fixture(AuthProfileUiState())
         runCurrent()
@@ -374,6 +427,7 @@ private class FakeProfileUserRepository : UserRepository {
     var lastUpdate: UserProfileUpdate? = null
     var updateResult: RepositoryResult<Unit> = RepositoryResult.Success(Unit)
     var updateGate: CompletableDeferred<Unit>? = null
+    var ignoreCancellation = false
 
     override suspend fun getUser(userId: String): RepositoryResult<User?> =
         RepositoryResult.Success(null)
@@ -390,7 +444,8 @@ private class FakeProfileUserRepository : UserRepository {
     ): RepositoryResult<Unit> {
         updateCalls += 1
         lastUpdate = update
-        updateGate?.await()
+        if (ignoreCancellation) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { updateGate?.await() }
+        else updateGate?.await()
         return updateResult
     }
 }

@@ -18,6 +18,9 @@ class ImgBbImageUploader(
     override suspend fun upload(image: ImageUpload): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
+                if (apiKey.isBlank()) {
+                    throw IOException("Dịch vụ tải ảnh chưa được cấu hình.")
+                }
                 val requestBody = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
                     .addFormDataPart("key", apiKey)

@@ -13,6 +13,9 @@ kotlin {
         compileSdk = 37
         minSdk = 26
 
+        // Android KMP resource packaging is opt-in. Shared Profile uses Res strings.
+        androidResources.enable = true
+
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }

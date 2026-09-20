@@ -30,6 +30,93 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class SmartBudgetPresenterTest {
     @Test
+    fun fractionalLegacyIncomeUsesTheSameRoundingForTotalAllocationAndEditor() = runTest {
+        val session = MutableStateFlow(BudgetSessionState("uid", "09-2026", plan = plan().copy(totalBudget = 100.9)))
+        val presenter = presenter(this, session, MutableStateFlow(emptyList()), PresenterBudgetRepository())
+        runCurrent()
+        assertEquals(101L, presenter.state.value.allocationPlan.income)
+        assertEquals(101L, presenter.state.value.allocationPlan.totalAmount)
+        presenter.onOpenSetup()
+        assertEquals("101", presenter.state.value.inputAmount)
+        assertEquals(101L, presenter.state.value.allocationPlan.totalAmount)
+        presenter.close()
+    }
+
+    @Test
+    fun liveTransactionsAndMonthChangesPreserveDraftButLogoutClearsAllUserData() = runTest {
+        val session = MutableStateFlow(BudgetSessionState("uid", "09-2026", plan = plan()))
+        val transactions = MutableStateFlow(emptyList<Transaction>())
+        val presenter = presenter(this, session, transactions, PresenterBudgetRepository())
+        runCurrent()
+        presenter.onOpenSetup()
+        presenter.onAmountChanged("12000001")
+        presenter.onRuleSelected(BudgetRule.JARS)
+        transactions.value = listOf(Transaction(type = "Chi", amount = 81.0, timestamp = 1L))
+        runCurrent()
+        assertEquals(BudgetRule.JARS, presenter.state.value.selectedRule)
+        assertEquals(12_000_001L, presenter.state.value.allocationPlan.totalAmount)
+        session.value = BudgetSessionState("uid", "10-2026", isLoading = true)
+        runCurrent()
+        assertTrue(presenter.state.value.showSetupDialog)
+        assertEquals("12000001", presenter.state.value.inputAmount)
+        assertEquals("10-2026", presenter.state.value.monthKey)
+        session.value = BudgetSessionState()
+        runCurrent()
+        assertEquals("", presenter.state.value.inputAmount)
+        assertEquals(0L, presenter.state.value.allocationPlan.totalAmount)
+        assertNull(presenter.state.value.pendingEvent)
+        session.value = BudgetSessionState("other", "10-2026")
+        runCurrent()
+        assertEquals(0L, presenter.state.value.allocationPlan.totalAmount)
+        presenter.close()
+    }
+
+    @Test
+    fun cancelAndResetRestoreSavedAllocationAndOversizedInputNeverWrites() = runTest {
+        val session = MutableStateFlow(BudgetSessionState("uid", "09-2026", plan = plan()))
+        val repository = PresenterBudgetRepository()
+        val presenter = presenter(this, session, MutableStateFlow(emptyList()), repository)
+        runCurrent()
+        presenter.onResetRatios()
+        assertEquals(10_000_000L, presenter.state.value.allocationPlan.totalAmount)
+        presenter.onOpenSetup()
+        presenter.onAmountChanged("9007199254740992")
+        presenter.onSave()
+        runCurrent()
+        assertEquals(BudgetValidationError.AMOUNT_INVALID, presenter.state.value.validationError)
+        assertEquals(0, repository.saveCalls)
+        presenter.onCancelSetup()
+        assertEquals(10_000_000L, presenter.state.value.allocationPlan.totalAmount)
+        presenter.close()
+    }
+
+    @Test
+    fun selectedMethodSixBucketsResetAndMonthNavigationAreDeterministic() = runTest {
+        val selectedMonths = mutableListOf<String>()
+        val session = MutableStateFlow(BudgetSessionState("uid", "09-2026"))
+        val presenter = SmartBudgetPresenter(
+            this,
+            session,
+            MutableStateFlow(emptyList()),
+            PresenterBudgetRepository(),
+            PresenterDateProvider,
+            selectedMonths::add
+        )
+        runCurrent()
+        presenter.onOpenSetup()
+        presenter.onAmountChanged("10000000")
+        presenter.onRuleSelected(BudgetRule.JARS)
+        assertEquals(6, presenter.state.value.allocationPlan.allocations.size)
+        assertEquals(10_000_000L, presenter.state.value.allocationPlan.totalAmount)
+        presenter.onResetRatios()
+        assertEquals(100, presenter.state.value.allocationPlan.totalPercent)
+        presenter.onPreviousMonth()
+        presenter.onNextMonth()
+        assertEquals(listOf("08-2026", "10-2026"), selectedMonths)
+        presenter.close()
+    }
+
+    @Test
     fun mapsLoadingEmptyDataAndRepositoryError() = runTest {
         val session = MutableStateFlow(BudgetSessionState("uid", "09-2026", isLoading = true))
         val transactions = MutableStateFlow(emptyList<Transaction>())
@@ -99,6 +186,7 @@ class SmartBudgetPresenterTest {
         val presenter = presenter(this, session, MutableStateFlow(emptyList()), repository)
         runCurrent()
         presenter.onOpenSetup()
+        presenter.onAmountChanged("10000000")
 
         repository.gate = CompletableDeferred()
         presenter.onSave()
@@ -107,6 +195,10 @@ class SmartBudgetPresenterTest {
         assertEquals(1, repository.saveCalls)
         assertTrue(presenter.state.value.isSaving)
         assertTrue(presenter.state.value.showSetupDialog)
+        presenter.onRuleSelected(BudgetRule.JARS)
+        presenter.onAmountChanged("20000000")
+        assertEquals(BudgetRule.FIFTY_THIRTY_TWENTY, presenter.state.value.selectedRule)
+        assertEquals("10000000", presenter.state.value.inputAmount)
 
         repository.gate?.complete(Unit)
         runCurrent()
@@ -146,7 +238,7 @@ class SmartBudgetPresenterTest {
         assertEquals(0.0, presenter.state.value.totalSpent)
         assertEquals(BudgetInsightKind.DEFAULT, presenter.state.value.insight.kind)
 
-        transactions.value = listOf(Transaction(type = "Chi", category = "Giải trí", amount = 81.0, timestamp = 1L))
+        transactions.value = listOf(Transaction(userId = "uid", type = "Chi", category = "Giải trí", amount = 81.0, timestamp = 1L))
         runCurrent()
         assertEquals(81.0, presenter.state.value.wants.spent)
         assertEquals(BudgetInsightKind.WANTS_WARNING, presenter.state.value.insight.kind)
@@ -185,6 +277,8 @@ class SmartBudgetPresenterTest {
         assertFalse(presenter.state.value.hasPlan)
         assertFalse(presenter.state.value.showSetupDialog)
         assertEquals("uid-2", presenter.state.value.userId)
+        assertEquals("", presenter.state.value.inputAmount)
+        assertEquals(0L, presenter.state.value.allocationPlan.totalAmount)
 
         session.value = BudgetSessionState()
         runCurrent()
@@ -200,6 +294,7 @@ class SmartBudgetPresenterTest {
         val presenter = presenter(this, session, MutableStateFlow(emptyList()), repository)
         runCurrent()
         presenter.onOpenSetup()
+        presenter.onAmountChanged("10000000")
         presenter.onSave()
         runCurrent()
         assertTrue(presenter.state.value.isSaving)

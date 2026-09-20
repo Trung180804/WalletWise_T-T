@@ -1,5 +1,6 @@
 package com.example.walletwise.data.repository
 
+import com.example.walletwise.BuildConfig
 import com.example.walletwise.data.image.AndroidTransactionWriter
 import com.example.walletwise.data.image.ContentResolverImageReader
 import com.example.walletwise.data.image.ImgBbImageUploader
@@ -18,6 +19,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -26,13 +29,12 @@ import kotlinx.coroutines.tasks.await
 
 class TransactionRepositoryImpl(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
+    private val legacyLoader: (suspend (String) -> List<Transaction>)? = null
 ) : TransactionRepository {
 
-    private val IMGBB_API_KEY = "eba44471019a00974a5ce9624bb366cc"
-
     private val imageUploader: ImageUploader by lazy {
-        ImgBbImageUploader(IMGBB_API_KEY)
+        ImgBbImageUploader(BuildConfig.IMGBB_API_KEY)
     }
 
     private val androidWriter by lazy {
@@ -57,7 +59,11 @@ class TransactionRepositoryImpl(
         }
 
         var legacyReadJob: Job? = null
+        val snapshotGeneration = java.util.concurrent.atomic.AtomicLong()
         val registration = transactionsCollection(userId).addSnapshotListener { snapshot, error ->
+            val generation = snapshotGeneration.incrementAndGet()
+            legacyReadJob?.cancel()
+            legacyReadJob = null
             if (!hasSession(userId)) {
                 trySend(notAuthenticated())
                 return@addSnapshotListener
@@ -72,8 +78,6 @@ class TransactionRepositoryImpl(
             }
 
             val primary = mapDocuments(snapshot?.documents.orEmpty(), userId)
-            legacyReadJob?.cancel()
-            legacyReadJob = null
             if (!TransactionFallbackPolicy.shouldLoadLegacy(primary.size)) {
                 trySend(RepositoryResult.Success(primary.sortedTransactionsNewestFirst()))
                 return@addSnapshotListener
@@ -82,9 +86,11 @@ class TransactionRepositoryImpl(
             // Legacy is migration-only: keep one live Firebase listener and use
             // a one-shot fallback read only while the primary collection is empty.
             legacyReadJob = launch {
-                val legacy = runCatching { loadLegacyTransactions(userId) }
-                    .getOrDefault(emptyList())
-                if (hasSession(userId)) {
+                val legacy = try { legacyLoader?.invoke(userId) ?: loadLegacyTransactions(userId) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { emptyList() }
+                coroutineContext.ensureActive()
+                if (hasSession(userId) && snapshotGeneration.get() == generation) {
                     trySend(
                         RepositoryResult.Success(
                             TransactionFallbackPolicy.select(primary, legacy)
@@ -95,6 +101,7 @@ class TransactionRepositoryImpl(
             }
         }
         awaitClose {
+            snapshotGeneration.incrementAndGet()
             legacyReadJob?.cancel()
             registration.remove()
         }
@@ -103,10 +110,11 @@ class TransactionRepositoryImpl(
     override suspend fun addTransaction(transaction: Transaction): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
+            require(transaction.userId.isBlank() || transaction.userId == userId) { "Phiên giao dịch đã thay đổi" }
             val docRef = db.collection(FirestoreSchema.USERS)
                 .document(userId)
                 .collection(FirestoreSchema.TRANSACTIONS)
-                .document()
+                .document(transaction.id.ifBlank { java.util.UUID.randomUUID().toString() })
 
             val finalTransaction = transaction.copy(
                 id = docRef.id,
@@ -165,6 +173,7 @@ class TransactionRepositoryImpl(
     override suspend fun updateTransaction(transaction: Transaction): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: throw Exception("Chưa đăng nhập")
+            require(transaction.userId.isBlank() || transaction.userId == userId) { "Phiên giao dịch đã thay đổi" }
 
             db.collection(FirestoreSchema.USERS)
                 .document(userId)

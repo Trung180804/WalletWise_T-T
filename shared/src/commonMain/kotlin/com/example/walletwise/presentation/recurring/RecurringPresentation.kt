@@ -4,6 +4,7 @@ import com.example.walletwise.domain.model.Category
 import com.example.walletwise.domain.model.DefaultCategories
 import com.example.walletwise.domain.model.RECURRING_FREQUENCY_MONTHLY
 import com.example.walletwise.domain.model.RECURRING_TIMES_COUNT_WIRE_VALUES
+import com.example.walletwise.domain.model.RECURRING_TIMES_UNLIMITED
 import com.example.walletwise.domain.model.TRANSACTION_TYPE_EXPENSE
 import com.example.walletwise.domain.model.RecurringTransaction
 import com.example.walletwise.domain.repository.RecurringTransactionRepository
@@ -73,7 +74,7 @@ data class RecurringUiState(
     val category: String = "",
     val paymentMethod: String = "Tiền mặt",
     val frequency: String = RECURRING_FREQUENCY_MONTHLY,
-    val timesCount: String = "1",
+    val timesCount: String = RECURRING_TIMES_UNLIMITED,
     val startDate: String = "",
     val time: String = "20:15",
     val note: String = "",
@@ -118,7 +119,10 @@ class RecurringUiPresenter(
     val state: StateFlow<RecurringUiState> = mutableState.asStateFlow()
     private val sessionJob: Job
     private val categoryJob: Job
-    private val optimisticEnabled = mutableMapOf<String, Boolean>()
+    // Preserve the confirmed value while Firestore emits local pending writes.
+    private val pendingEnabled = mutableMapOf<String, Boolean>()
+    private val confirmedEnabled = mutableMapOf<String, Boolean>()
+    private val queuedEnabled = mutableMapOf<String, Boolean>()
     private val requestedPermissions = mutableSetOf<ReminderPermission>()
     private val queuedPermissions = mutableListOf<ReminderPermission>()
     private var nextEventId = 1L
@@ -129,15 +133,17 @@ class RecurringUiPresenter(
                 val current = mutableState.value
                 val identityChanged = current.userId != session.userId
                 if (identityChanged) {
-                    optimisticEnabled.clear()
+                    pendingEnabled.clear()
+                    confirmedEnabled.clear()
+                    queuedEnabled.clear()
                     requestedPermissions.clear()
                     queuedPermissions.clear()
                 }
                 session.recurring.forEach { rule ->
-                    if (optimisticEnabled[rule.id] == rule.isEnabled) optimisticEnabled.remove(rule.id)
+                    if (confirmedEnabled[rule.id] == rule.isEnabled) confirmedEnabled.remove(rule.id)
                 }
                 val displayed = session.recurring.map { rule ->
-                    optimisticEnabled[rule.id]?.let { rule.copy(isEnabled = it) } ?: rule
+                    (pendingEnabled[rule.id] ?: confirmedEnabled[rule.id])?.let { rule.copy(isEnabled = it) } ?: rule
                 }
                 mutableState.value = current.copy(
                     userId = session.userId,
@@ -185,7 +191,7 @@ class RecurringUiPresenter(
             category = category,
             paymentMethod = "Tiền mặt",
             frequency = RECURRING_FREQUENCY_MONTHLY,
-            timesCount = "1",
+            timesCount = RECURRING_TIMES_UNLIMITED,
             startDate = RecurringScheduleCalculator.formatStartDate(today),
             time = "20:15",
             note = "",
@@ -398,17 +404,26 @@ class RecurringUiPresenter(
     fun onToggle(recurring: RecurringTransaction, enabled: Boolean) {
         val current = mutableState.value
         val userId = current.userId ?: return
-        if (recurring.id in current.togglingRecurringIds) return
-        optimisticEnabled[recurring.id] = enabled
+        if (recurring.id in current.togglingRecurringIds) {
+            queuedEnabled[recurring.id] = enabled
+            return
+        }
+        pendingEnabled[recurring.id] = recurring.isEnabled
         mutableState.value = current.copy(
-            recurring = current.recurring.map { if (it.id == recurring.id) it.copy(isEnabled = enabled) else it },
             togglingRecurringIds = current.togglingRecurringIds + recurring.id,
             repositoryError = null
         )
         scope.launch {
-            when (val result = setEnabled(userId, recurring.id, enabled)) {
+            val result = setEnabled(userId, recurring.id, enabled)
+            if (sessionController.state.value.userId != userId) return@launch
+            when (result) {
                 is RecurringUseCaseResult.Success -> {
                     if (sessionController.state.value.userId != userId) return@launch
+                    pendingEnabled.remove(recurring.id)
+                    confirmedEnabled[recurring.id] = enabled
+                    mutableState.value = mutableState.value.copy(
+                        recurring = mutableState.value.recurring.map { if (it.id == recurring.id) it.copy(isEnabled = enabled) else it }
+                    )
                     val outcome = if (enabled) {
                         coordinator.apply(recurring.copy(userId = userId, isEnabled = true), forceSchedule = true)
                     } else {
@@ -421,7 +436,8 @@ class RecurringUiPresenter(
                 }
                 is RecurringUseCaseResult.ValidationFailure -> rollbackToggle(recurring, result.error)
                 is RecurringUseCaseResult.RepositoryFailure -> {
-                    optimisticEnabled.remove(recurring.id)
+                    pendingEnabled.remove(recurring.id)
+                    confirmedEnabled.remove(recurring.id)
                     mutableState.value = mutableState.value.copy(
                         recurring = mutableState.value.recurring.map { if (it.id == recurring.id) recurring else it },
                         togglingRecurringIds = mutableState.value.togglingRecurringIds - recurring.id,
@@ -429,6 +445,10 @@ class RecurringUiPresenter(
                     )
                     emit(RecurringUiEvent.Message(RecurringMessage.WRITE_ERROR, result.error.message))
                 }
+            }
+            queuedEnabled.remove(recurring.id)?.let { requested ->
+                val displayed = mutableState.value.recurring.firstOrNull { it.id == recurring.id }
+                if (displayed != null && displayed.isEnabled != requested) onToggle(displayed, requested)
             }
         }
     }
@@ -511,7 +531,8 @@ class RecurringUiPresenter(
     }
 
     private fun rollbackToggle(recurring: RecurringTransaction, error: RecurringValidationError) {
-        optimisticEnabled.remove(recurring.id)
+        pendingEnabled.remove(recurring.id)
+        confirmedEnabled.remove(recurring.id)
         mutableState.value = mutableState.value.copy(
             recurring = mutableState.value.recurring.map { if (it.id == recurring.id) recurring else it },
             togglingRecurringIds = mutableState.value.togglingRecurringIds - recurring.id,

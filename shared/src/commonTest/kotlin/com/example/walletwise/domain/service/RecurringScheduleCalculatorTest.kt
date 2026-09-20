@@ -64,25 +64,23 @@ class RecurringScheduleCalculatorTest {
     }
 
     @Test
-    fun numericTimesCountLimitsRunsAndUnlimitedKeepsScheduling() {
+    fun legacyNumericTimesCountNeverEndsAnEnabledSchedule() {
         (1..7).forEach { count ->
             val rule = recurring(timesCount = count.toString())
-            assertEquals(count.toLong(), RecurringScheduleCalculator.executionLimit(rule))
-            assertTrue(RecurringScheduleCalculator.hasReachedExecutionLimit(rule, count - 1L))
+            assertEquals(dateTime(2026, 9, 21, 8), RecurringScheduleCalculator.nextOccurrence(rule, dateTime(2026, 9, 20, 9))?.at)
         }
         val unlimited = recurring(timesCount = RECURRING_TIMES_UNLIMITED)
-        assertEquals(Long.MAX_VALUE, RecurringScheduleCalculator.executionLimit(unlimited))
-        assertFalse(RecurringScheduleCalculator.hasReachedExecutionLimit(unlimited, 100L))
+        assertEquals(dateTime(2026, 9, 21, 8), RecurringScheduleCalculator.nextOccurrence(unlimited, dateTime(2026, 9, 20, 9))?.at)
     }
 
     @Test
-    fun finiteOfflineRecoveryReturnsOnlyTheLastAllowedOccurrence() {
+    fun legacyFiniteOfflineRecoverySelectsLatestWithoutBulkBackfill() {
         val rule = recurring(timesCount = "2")
         val due = RecurringScheduleCalculator.latestDueOccurrence(rule, dateTime(2026, 9, 20, 9))
 
-        assertEquals(1L, due?.index)
-        assertEquals(dateTime(2026, 9, 6, 8), due?.at)
-        assertNull(RecurringScheduleCalculator.nextOccurrence(rule, dateTime(2026, 9, 20, 9)))
+        assertEquals(15L, due?.index)
+        assertEquals(dateTime(2026, 9, 20, 8), due?.at)
+        assertEquals(dateTime(2026, 9, 21, 8), RecurringScheduleCalculator.nextOccurrence(rule, dateTime(2026, 9, 20, 9))?.at)
     }
 
     @Test

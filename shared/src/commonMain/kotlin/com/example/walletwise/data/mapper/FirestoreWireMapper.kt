@@ -71,7 +71,8 @@ object FirestoreWireMapper {
         category = data.string("category"),
         note = data.string("note"),
         timestamp = data.transactionTimestampOrNull("timestamp") ?: INVALID_TRANSACTION_TIMESTAMP,
-        imageUrl = data.string("imageUrl")
+        imageUrl = data.string("imageUrl"),
+        categoryId = data.string("categoryId")
     )
 
     fun transactionToMap(transaction: Transaction): Map<String, Any> = mapOf(
@@ -84,7 +85,7 @@ object FirestoreWireMapper {
         "note" to transaction.note,
         "timestamp" to transaction.timestamp,
         "imageUrl" to transaction.imageUrl
-    )
+    ) + if (transaction.categoryId.isNotBlank()) mapOf("categoryId" to transaction.categoryId) else emptyMap()
 
     fun categoryFromMap(documentId: String, data: Map<String, Any?>): Category = Category(
         id = data.string("id", documentId),
@@ -172,7 +173,7 @@ object FirestoreWireMapper {
         category = data.string("category", "Hóa đơn"),
         paymentMethod = data.string("paymentMethod", "Tiền mặt"),
         frequency = data.string("frequency", RECURRING_FREQUENCY_MONTHLY),
-        timesCount = data.string("timesCount", "1"),
+        timesCount = data.string("timesCount", com.example.walletwise.domain.model.RECURRING_TIMES_UNLIMITED),
         startDate = data.string("startDate"),
         time = data.string("time", "20:15"),
         note = data.string("note"),

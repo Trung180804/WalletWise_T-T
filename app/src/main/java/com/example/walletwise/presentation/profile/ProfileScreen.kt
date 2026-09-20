@@ -12,6 +12,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.walletwise.presentation.support.SupportViewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,7 +37,11 @@ fun ProfileScreen(
     onLogout: () -> Unit,
     onSubScreenChange: (Boolean) -> Unit
 ) {
-    var currentRoute by remember { mutableStateOf(ProfileRoute.MAIN) }
+    var currentRoute by rememberSaveable { mutableStateOf(ProfileRoute.MAIN) }
+    val supportModel: SupportViewModel = viewModel(factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = SupportViewModel(authViewModel.uiState) as T
+    })
     val context = LocalContext.current
     val state = authViewModel.profileUiState.collectAsStateWithLifecycle().value
     val event = state.pendingEvent
@@ -96,7 +105,7 @@ fun ProfileScreen(
             ProfileRoute.DEFAULT_CURRENCY -> DefaultCurrencyView {
                 currentRoute = ProfileRoute.SETTINGS
             }
-            ProfileRoute.CUSTOMER_CARE -> CustomerCareView { currentRoute = ProfileRoute.MAIN }
+            ProfileRoute.CUSTOMER_CARE -> CustomerCareView(supportModel) { currentRoute = ProfileRoute.MAIN }
             ProfileRoute.CATEGORY_MANAGEMENT -> CategoryManagementView(viewModel) {
                 currentRoute = ProfileRoute.SETTINGS
             }

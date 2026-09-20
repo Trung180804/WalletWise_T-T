@@ -2,6 +2,10 @@ package com.example.walletwise.domain.service
 
 import com.example.walletwise.domain.model.BudgetPlan
 import com.example.walletwise.domain.model.BudgetRule
+import com.example.walletwise.domain.model.FinancialAllocationPlan
+import com.example.walletwise.domain.model.FinancialBucketAllocation
+import com.example.walletwise.domain.model.FinancialMethod
+import com.example.walletwise.domain.model.FinancialMethods
 import com.example.walletwise.domain.model.Transaction
 import kotlin.math.max
 
@@ -65,6 +69,23 @@ data class BudgetMetrics(
 )
 
 object BudgetCalculator {
+    fun allocateExactly(income: Long, method: FinancialMethod): FinancialAllocationPlan {
+        if (income <= 0L || method.totalPercent != 100) {
+            return FinancialAllocationPlan(method, income.coerceAtLeast(0L), method.buckets.map { FinancialBucketAllocation(it, 0L) })
+        }
+        val base = method.buckets.map { bucket -> income / 100L * bucket.percent + income % 100L * bucket.percent / 100L }
+        var remainder = income - base.sum()
+        val allocations = method.buckets.mapIndexed { index, bucket ->
+            val extra = if (remainder > 0L) 1L else 0L
+            remainder -= extra
+            FinancialBucketAllocation(bucket, base[index] + extra)
+        }
+        return FinancialAllocationPlan(method, income, allocations)
+    }
+
+    fun allocateExactly(income: Long, rule: BudgetRule): FinancialAllocationPlan =
+        allocateExactly(income, FinancialMethods.forRule(rule))
+
     fun allocate(totalBudget: Double, rule: BudgetRule): BudgetAllocation {
         if (!totalBudget.isFinite() || totalBudget <= 0.0) return BudgetAllocation(0.0, 0.0, 0.0)
         return when (rule) {

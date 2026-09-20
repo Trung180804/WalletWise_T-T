@@ -21,6 +21,25 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecurringUiPresenterTest {
+    @Test fun rapidToggleKeepsLatestIntentAfterRepositoryConfirmation() = runTest {
+        val fixture = fixture()
+        val enabled = rule()
+        fixture.session.setUserId("user"); runCurrent()
+        fixture.repository.emit("user", listOf(enabled)); runCurrent()
+        fixture.repository.toggleGate = kotlinx.coroutines.CompletableDeferred()
+        fixture.presenter.onToggle(enabled, false); runCurrent()
+        assertTrue(fixture.presenter.state.value.recurring.single().isEnabled)
+        // A local snapshot is not a repository acknowledgement.
+        fixture.repository.emit("user", listOf(enabled.copy(isEnabled = false))); runCurrent()
+        assertTrue(fixture.presenter.state.value.recurring.single().isEnabled)
+        fixture.presenter.onToggle(enabled, true)
+        assertTrue(enabled.id in fixture.presenter.state.value.togglingRecurringIds)
+        fixture.repository.toggleGate!!.complete(Unit); runCurrent()
+        assertTrue(fixture.repository.rules.getValue(enabled.id).isEnabled)
+        assertTrue(fixture.presenter.state.value.recurring.single().isEnabled)
+        assertTrue(fixture.presenter.state.value.togglingRecurringIds.isEmpty())
+        fixture.presenter.onOpenAdd(); assertEquals(RECURRING_TIMES_UNLIMITED, fixture.presenter.state.value.timesCount)
+    }
     @Test
     fun presenterExposesLoadingEmptyRepositoryErrorAndDetailState() = runTest {
         val fixture = fixture()
@@ -95,7 +114,7 @@ class RecurringUiPresenterTest {
     }
 
     @Test
-    fun duplicateSubmitIsIgnoredAndToggleFailureRollsBackOptimisticState() = runTest {
+    fun duplicateSubmitIsIgnoredAndToggleFailureKeepsConfirmedState() = runTest {
         val fixture = fixture()
         val rule = rule()
         fixture.repository.rules[rule.id] = rule
@@ -111,7 +130,7 @@ class RecurringUiPresenterTest {
 
         fixture.repository.toggleFailure = true
         fixture.presenter.onToggle(rule, false)
-        assertFalse(fixture.presenter.state.value.recurring.first { it.id == rule.id }.isEnabled)
+        assertTrue(fixture.presenter.state.value.recurring.first { it.id == rule.id }.isEnabled)
         runCurrent()
         assertTrue(fixture.presenter.state.value.recurring.first { it.id == rule.id }.isEnabled)
     }

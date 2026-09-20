@@ -16,7 +16,9 @@ import com.example.walletwise.presentation.transaction.TransactionListUiEvent
 fun AndroidTransactionList(
     viewModel: TransactionViewModel,
     onNavigateToAdd: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    emptyMessage: String = "Không có giao dịch nào.",
+    compactRows: Boolean = false
 ) {
     val state by viewModel.transactionListState.collectAsState()
     val event = state.pendingEvent
@@ -47,13 +49,10 @@ fun AndroidTransactionList(
         onEdit = viewModel::onTransactionEditRequested,
         onDelete = viewModel::onTransactionDeleteRequested,
         modifier = modifier,
+        emptyMessage = emptyMessage,
+        compactRows = compactRows,
         imageContent = { imageUrl, imageModifier ->
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = "Ảnh giao dịch",
-                modifier = imageModifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            TransactionPhoto(imageUrl, imageModifier.fillMaxSize())
         }
     )
 }

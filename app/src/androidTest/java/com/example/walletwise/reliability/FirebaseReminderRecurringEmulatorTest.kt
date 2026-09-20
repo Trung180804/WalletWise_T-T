@@ -163,16 +163,16 @@ class FirebaseReminderRecurringEmulatorTest {
     }
 
     @Test
-    fun b_finalOccurrenceDisablesAndExistingTransactionRepairsMarkerAtomically() = runBlocking {
+    fun b_legacySingleOccurrenceStaysEnabledAndExistingTransactionRepairsMarkerAtomically() = runBlocking {
         val finite = recurring("finite", "1")
         recurringRef(userId, finite.id).set(FirestoreWireMapper.recurringToMap(finite)).await()
         val repository = RecurringTransactionRepositoryImpl(requireFirestore(), requireAuth())
 
         val finiteResult = repository.executeIfDue(userId, finite.id, DUE_NOW, EXECUTED_AT).successValue()
         assertTrue(finiteResult.transactionWasCreated)
-        assertFalse(requireNotNull(finiteResult.recurring).isEnabled)
+        assertTrue(requireNotNull(finiteResult.recurring).isEnabled)
         val finiteStored = recurringRef(userId, finite.id).get(Source.SERVER).await()
-        assertEquals(false, finiteStored.getBoolean("enabled"))
+        assertEquals(true, finiteStored.getBoolean("enabled"))
         assertEquals(OCCURRENCE_KEY, finiteStored.getString("lastExecutedDate"))
 
         val repair = recurring("repair", RECURRING_TIMES_UNLIMITED)

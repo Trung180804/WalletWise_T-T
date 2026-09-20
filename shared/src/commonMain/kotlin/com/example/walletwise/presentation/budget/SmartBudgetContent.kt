@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -46,10 +47,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.walletwise.domain.model.BudgetRule
+import com.example.walletwise.domain.model.FinancialMethods
+import com.example.walletwise.domain.model.FinancialMethod
+import com.example.walletwise.domain.model.FinancialAllocationPlan
 import com.example.walletwise.domain.service.BudgetGroupProgress
 import com.example.walletwise.domain.service.BudgetProgressStatus
 import com.example.walletwise.domain.validation.BudgetValidationError
@@ -59,6 +66,15 @@ import com.example.walletwise.shared.resources.*
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.round
+import com.example.walletwise.domain.service.MoneyInput
+import com.example.walletwise.domain.service.FinancialCategoryMapping
+import com.example.walletwise.domain.service.formatFinancialPercent
+import com.example.walletwise.presentation.transaction.GroupedMoneyTransformation
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.heightIn
 
 @Composable
 fun SmartBudgetContent(
@@ -69,8 +85,16 @@ fun SmartBudgetContent(
     onAmountChanged: (String) -> Unit,
     onRuleSelected: (BudgetRule) -> Unit,
     onSave: () -> Unit,
-    onRefreshInsight: () -> Unit
+    onRefreshInsight: () -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onResetRatios: () -> Unit,
+    onOpenMapping: () -> Unit = {},
+    onCloseMapping: () -> Unit = {},
+    onCategoryMapped: (String, String) -> Unit = { _, _ -> },
+    onRetryMapping: () -> Unit = {}
 ) {
+    val moneyInput = com.example.walletwise.presentation.transaction.rememberMoneyInput(state.inputAmount, onAmountChanged)
     Column(modifier = Modifier.fillMaxSize()) {
         TopHeader(stringResource(Res.string.budget_title), onBack)
 
@@ -81,53 +105,226 @@ fun SmartBudgetContent(
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(Modifier.height(16.dp))
-            BudgetHeaderCard(state, onOpenSetup)
+            if (!state.showSetupDialog) MonthSelector(state.monthKey, onPreviousMonth, onNextMonth)
+            when {
+                state.isLoading -> Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                state.repositoryError != null && !state.hasPlan -> Text(
+                    state.repositoryError.message,
+                    color = MaterialTheme.colorScheme.error
+                )
+                !state.hasPlan -> Column {
+                    Text("Thu nhập dự kiến của bạn trong tháng này là bao nhiêu?", style = MaterialTheme.typography.titleLarge)
+                    OutlinedTextField(moneyInput.first, moneyInput.second, label = { Text("Thu nhập dự kiến") },
+                        suffix = { Text("đ") }, visualTransformation = GroupedMoneyTransformation,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                    FinancialMethodSelection { rule -> onOpenSetup(); onRuleSelected(rule) }
+                }
+                else -> FinancialPlanResult(
+                    state,
+                    onOpenSetup,
+                    onPreviousMonth,
+                    onNextMonth,
+                    onResetRatios
+                )
+            }
             if (state.hasPlan) {
-                Spacer(Modifier.height(16.dp))
-                SafeToSpendCard(state)
-                Spacer(Modifier.height(20.dp))
-                AllocationSection(state)
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    stringResource(Res.string.budget_progress_title),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(Modifier.height(12.dp))
-                val isJars = state.plan?.ruleType == BudgetRule.JARS.wireValue
-                BudgetGroupCard(
-                    title = if (isJars) Res.string.budget_needs_jars else Res.string.budget_needs_standard,
-                    description = Res.string.budget_needs_description,
-                    progress = state.needs
-                )
-                Spacer(Modifier.height(12.dp))
-                BudgetGroupCard(
-                    title = if (isJars) Res.string.budget_wants_jars else Res.string.budget_wants_standard,
-                    description = Res.string.budget_wants_description,
-                    progress = state.wants
-                )
-                Spacer(Modifier.height(12.dp))
-                BudgetGroupCard(
-                    title = if (isJars) Res.string.budget_savings_jars else Res.string.budget_savings_standard,
-                    description = Res.string.budget_savings_description,
-                    progress = state.savings
-                )
-                Spacer(Modifier.height(20.dp))
-                InsightCard(state.insight, onRefreshInsight)
+                if (state.mappingLoading) Text("Đang tải phân nhóm danh mục…")
+                state.mappingError?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onRetryMapping) { Text("Thử lại phân nhóm") } }
+                TextButton(onOpenMapping) { Text("Xem / sửa phân nhóm danh mục") }
             }
             Spacer(Modifier.height(100.dp))
         }
     }
 
     if (state.showSetupDialog) {
-        BudgetSetupDialog(
+        FinancialSetupDialog(
             state = state,
             onDismiss = onCancelSetup,
             onAmountChanged = onAmountChanged,
             onRuleSelected = onRuleSelected,
-            onSave = onSave
+            onSave = onSave,
+            onPreviousMonth = onPreviousMonth,
+            onNextMonth = onNextMonth
         )
+    }
+    if (state.showMappingDialog) FinancialMappingDialog(state, onCloseMapping, onCategoryMapped)
+}
+
+@Composable
+private fun FinancialMethodSelection(onSelect: (BudgetRule) -> Unit) {
+    Text("Chọn phương pháp phù hợp", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text("Bạn có thể đổi phương pháp bất cứ lúc nào.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(16.dp))
+    FinancialMethods.All.forEach { method ->
+        FinancialMethodCard(method) { onSelect(method.rule) }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun FinancialMethodCard(method: FinancialMethod, onSelect: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(method.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(method.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            method.buckets.forEach { Text("${it.percent}%  ${it.name}", fontWeight = FontWeight.Medium) }
+            Spacer(Modifier.height(8.dp))
+            Text(method.example, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onSelect, modifier = Modifier.fillMaxWidth()) { Text("Sử dụng phương pháp này") }
+        }
+    }
+}
+
+@Composable
+private fun FinancialPlanResult(
+    state: SmartBudgetUiState,
+    onEdit: () -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit,
+    onReset: () -> Unit
+) {
+    Spacer(Modifier.height(8.dp))
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(state.allocationPlan.method.name, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+            Text("Tổng thu nhập: ${formatBudgetMoney(state.totalBudget)}", fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("Đã chi trong tháng: ${formatBudgetMoney(state.totalSpent)}")
+            Text("Còn lại: ${formatBudgetMoney(state.totalRemaining)}")
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+    Text("Phân bổ • ${state.allocationPlan.totalPercent}%", style = MaterialTheme.typography.titleMedium)
+    Text("Phần màu: đã dùng • Phần nhạt: còn lại", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    state.liveAllocation.buckets.forEach { usage ->
+        val palette = financialBucketPalette(usage.allocation.bucket.key)
+        Card(Modifier.fillMaxWidth().padding(vertical = 6.dp), shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = palette.container),
+            border = androidx.compose.foundation.BorderStroke(1.dp, palette.accent.copy(alpha = 0.3f))) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(palette.icon, null, tint = palette.accent)
+                    Text("${usage.allocation.bucket.name} • ${usage.allocation.bucket.percent}%", fontWeight = FontWeight.Bold)
+                }
+                Text("Được cấp: ${formatBudgetMoney(usage.allocation.amount.toDouble())}")
+                Text("Đã chi: ${formatBudgetMoney(usage.spent.toDouble())}")
+                Text("Còn lại: ${formatBudgetMoney(usage.remaining.toDouble())}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Đã dùng của quỹ: ${formatFinancialPercent(usage.usedPercent)}")
+                Text("Còn lại của quỹ: ${formatFinancialPercent(usage.remainingPercent)}", style = MaterialTheme.typography.bodyMedium)
+                Text("Còn lại so với tổng thu nhập: ${formatFinancialPercent(usage.remainingIncomePercent(state.allocationPlan.income))}", style = MaterialTheme.typography.bodySmall)
+                BudgetUsageTube(usage, fillColor = palette.accent)
+                Text(when (usage.status) { BudgetProgressStatus.SAFE -> "Bình thường"; BudgetProgressStatus.WARNING -> "Sắp hết quỹ"; BudgetProgressStatus.EXCEEDED -> "Vượt ngân sách" },
+                    color = if (usage.status == BudgetProgressStatus.SAFE) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("Sửa kế hoạch") }
+        TextButton(onClick = onReset, modifier = Modifier.weight(1f)) { Text("Đặt lại tỷ lệ") }
+    }
+    TextButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Text("Đổi phương pháp") }
+    Text(
+        "Các con số là gợi ý quản lý tiền, không phải tư vấn đầu tư bắt buộc.",
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun AllocationRows(plan: FinancialAllocationPlan) {
+    Text("Phân bổ đề xuất • ${plan.totalPercent}%", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+    Spacer(Modifier.height(8.dp))
+    plan.allocations.forEach { allocation ->
+        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Column(Modifier.padding(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(allocation.bucket.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                    Text("${allocation.bucket.percent}%", fontWeight = FontWeight.Bold)
+                }
+                Text(formatBudgetMoney(allocation.amount.toDouble()), fontWeight = FontWeight.Bold)
+                LinearProgressIndicator(
+                    progress = { allocation.bucket.percent / 100f },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).semantics {
+                        contentDescription = "${allocation.bucket.name}: ${allocation.bucket.percent}%"
+                    }
+                )
+                Text(allocation.bucket.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinancialSetupDialog(
+    state: SmartBudgetUiState,
+    onDismiss: () -> Unit,
+    onAmountChanged: (String) -> Unit,
+    onRuleSelected: (BudgetRule) -> Unit,
+    onSave: () -> Unit,
+    onPreviousMonth: () -> Unit,
+    onNextMonth: () -> Unit
+) {
+    val moneyInput = com.example.walletwise.presentation.transaction.rememberMoneyInput(state.inputAmount, onAmountChanged)
+    Dialog(onDismissRequest = onDismiss) {
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+            Column(Modifier.padding(18.dp).verticalScroll(rememberScrollState())) {
+                Text("Lập kế hoạch tháng ${state.monthKey}", fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                MonthSelector(state.monthKey, onPreviousMonth, onNextMonth, enabled = !state.isSaving)
+                Text("1. Chọn phương pháp  •  2. Nhập thu nhập  •  3. Xem phân bổ", fontSize = 12.sp)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        enabled = !state.isSaving,
+                        selected = state.selectedRule == BudgetRule.FIFTY_THIRTY_TWENTY,
+                        onClick = { onRuleSelected(BudgetRule.FIFTY_THIRTY_TWENTY) },
+                        label = { Text("50/30/20") }
+                    )
+                    FilterChip(
+                        enabled = !state.isSaving,
+                        selected = state.selectedRule == BudgetRule.JARS,
+                        onClick = { onRuleSelected(BudgetRule.JARS) },
+                        label = { Text("6 chiếc lọ") }
+                    )
+                }
+                OutlinedTextField(
+                    value = moneyInput.first,
+                visualTransformation = GroupedMoneyTransformation,
+                    onValueChange = moneyInput.second,
+                    label = { Text("Thu nhập dự kiến") },
+                    singleLine = true,
+                    enabled = !state.isSaving,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                state.validationError?.let { Text(validationMessage(it), color = MaterialTheme.colorScheme.error) }
+                Spacer(Modifier.height(12.dp))
+                AllocationRows(state.allocationPlan)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss, enabled = !state.isSaving) { Text("Hủy") }
+                    Button(onClick = onSave, enabled = !state.isSaving) { Text(if (state.isSaving) "Đang lưu…" else "Lưu kế hoạch") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthSelector(monthKey: String, onPrevious: () -> Unit, onNext: () -> Unit, enabled: Boolean = true) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onPrevious, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Tháng trước" }) { Text("‹") }
+        Text(monthKey, fontWeight = FontWeight.Bold)
+        TextButton(onClick = onNext, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Tháng sau" }) { Text("›") }
     }
 }
 
@@ -468,6 +665,7 @@ private fun BudgetSetupDialog(
     onRuleSelected: (BudgetRule) -> Unit,
     onSave: () -> Unit
 ) {
+    val moneyInput = com.example.walletwise.presentation.transaction.rememberMoneyInput(state.inputAmount, onAmountChanged)
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(24.dp),
@@ -483,8 +681,9 @@ private fun BudgetSetupDialog(
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
-                    value = state.inputAmount,
-                    onValueChange = onAmountChanged,
+                    value = moneyInput.first,
+                visualTransformation = GroupedMoneyTransformation,
+                    onValueChange = moneyInput.second,
                     enabled = !state.isSaving,
                     label = { Text(stringResource(Res.string.budget_total_input)) },
                     isError = state.validationError != null,
@@ -597,4 +796,38 @@ private fun validationMessage(error: BudgetValidationError): String = when (erro
 }
 
 fun formatBudgetMoney(value: Double): String =
-    formatCurrencyNumber(if (value.isFinite()) round(value) else 0.0)
+    if (!value.isFinite()) "0 ₫" else round(value).toLong().let { amount ->
+        val raw = amount.toString()
+        (if (amount < 0) "-" else "") + raw.removePrefix("-").reversed().chunked(3).joinToString(".").reversed() + " ₫"
+    }
+
+@Composable
+private fun FinancialMappingDialog(state: SmartBudgetUiState, onClose: () -> Unit, onMap: (String, String) -> Unit) {
+    Dialog(onDismissRequest = onClose) {
+        Card(Modifier.fillMaxWidth().heightIn(max = 560.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Phân nhóm danh mục", style = MaterialTheme.typography.titleLarge)
+                Text("Mỗi danh mục đều có quỹ. Bạn có thể đổi quỹ phù hợp với kế hoạch.", style = MaterialTheme.typography.bodyMedium)
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    state.mappingCategories.forEach { category ->
+                        var expanded by remember(category) { mutableStateOf(false) }
+                        val bucketId = FinancialCategoryMapping.bucket(category, state.allocationPlan.method.rule, state.categoryMappings, state.mappingCategoryIds[category].orEmpty())
+                        Text(category, fontWeight = FontWeight.Bold)
+                        Box {
+                            OutlinedButton({ expanded = true }, enabled = !state.mappingLoading && !state.mappingSaving && state.mappingError == null) {
+                                Text(state.allocationPlan.method.buckets.first { it.key == bucketId }.name)
+                            }
+                            DropdownMenu(expanded, { expanded = false }) {
+                                state.allocationPlan.method.buckets.forEach { bucket ->
+                                    DropdownMenuItem({ Text(bucket.name) }, { onMap(category, bucket.key); expanded = false })
+                                }
+                            }
+                        }
+                    }
+                }
+                if (state.mappingSaving) Text("Đang lưu phân nhóm…")
+                TextButton(onClose, modifier = Modifier.fillMaxWidth()) { Text("Đóng") }
+            }
+        }
+    }
+}

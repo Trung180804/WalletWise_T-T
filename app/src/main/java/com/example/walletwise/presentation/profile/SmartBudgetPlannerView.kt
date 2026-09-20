@@ -58,6 +58,13 @@ fun SmartBudgetPlannerView(
         onAmountChanged = presenter::onAmountChanged,
         onRuleSelected = presenter::onRuleSelected,
         onSave = presenter::onSave,
-        onRefreshInsight = presenter::onRefreshInsight
+        onRefreshInsight = presenter::onRefreshInsight,
+        onPreviousMonth = presenter::onPreviousMonth,
+        onNextMonth = presenter::onNextMonth,
+        onResetRatios = presenter::onResetRatios,
+        onOpenMapping = presenter::onOpenMapping,
+        onCloseMapping = presenter::onCloseMapping,
+        onCategoryMapped = presenter::onCategoryMapped,
+        onRetryMapping = presenter::onRetryMapping
     )
 }

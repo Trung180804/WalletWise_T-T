@@ -33,7 +33,7 @@ fun TransactionHomeContent(state: TransactionHomeState, session: TransactionHome
             onEdit = {}, onDelete = {}, modifier = Modifier.weight(1f),
             imageContent = { _, modifier -> NoTransactionImage(modifier) },
             readOnly = true, selectedTransactionId = state.selectedTransactionId,
-            onDetailDismissed = session::dismissDetail, emptyImageLabel = "No image"
+            onDetailDismissed = session::dismissDetail
         )
     }
 }
@@ -45,12 +45,5 @@ private fun Summary(label: String, amount: Double, type: String, modifier: Modif
             Text(label, style = MaterialTheme.typography.labelLarge)
             Text(formatTransactionAmount(amount, type), fontWeight = FontWeight.Bold)
         }
-    }
-}
-
-@Composable
-private fun NoTransactionImage(modifier: Modifier) {
-    androidx.compose.foundation.layout.Box(modifier, contentAlignment = androidx.compose.ui.Alignment.Center) {
-        Text("No image", style = MaterialTheme.typography.labelSmall)
     }
 }

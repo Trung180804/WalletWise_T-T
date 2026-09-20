@@ -40,6 +40,20 @@ object BudgetCalendar {
         BudgetDate(date.year, (date.month + 1).coerceIn(1, 12), 1)
     }
 
+    fun previousMonth(date: BudgetDate): BudgetDate = if (date.month == 1) {
+        BudgetDate(date.year - 1, 12, 1)
+    } else {
+        BudgetDate(date.year, (date.month - 1).coerceIn(1, 12), 1)
+    }
+
+    fun dateFromMonthKey(monthKey: String): BudgetDate? {
+        val parts = monthKey.split('-')
+        if (parts.size != 2) return null
+        val month = parts[0].toIntOrNull() ?: return null
+        val year = parts[1].toIntOrNull() ?: return null
+        return BudgetDate(year, month, 1).takeIf { month in 1..12 }
+    }
+
     fun isLeapYear(year: Int): Boolean =
         year % 400 == 0 || (year % 4 == 0 && year % 100 != 0)
 }

@@ -53,7 +53,6 @@ import com.example.walletwise.utils.AndroidRecurringPlatform
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuth.AuthStateListener
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +61,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import org.json.JSONObject
 import java.time.LocalDate
 import java.time.YearMonth
@@ -99,11 +99,11 @@ class TransactionViewModel(
     )
     val transactionListState = transactionListPresenter.state
 
-    private val _userProfile = MutableStateFlow<com.example.walletwise.domain.model.User?>(null)
-    val userProfile: StateFlow<com.example.walletwise.domain.model.User?> = _userProfile.asStateFlow()
-
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
+    private var transactionWriteJob: kotlinx.coroutines.Job? = null
+    private var writeGeneration = 0L
+    private var activeWriteUserId: String? = null
 
     // Lưu số Streak hiển thị lên UI
     private val _streakCount = MutableStateFlow(0)
@@ -162,24 +162,37 @@ class TransactionViewModel(
 
     // Keep one listener per source. Re-registering these on every auth update
     // causes duplicate background work and can amplify a Firebase failure.
-    private var profileListener: ListenerRegistration? = null
     private var authStateListener: AuthStateListener? = null
 
     // Biến lưu trữ giao dịch đang được chọn để Sửa
     var transactionToEdit by mutableStateOf<Transaction?>(null)
 
     // CÁC BIẾN TRẠNG THÁI CHO TRỢ LÝ AI
-    val aiAssistant = TransactionAIAssistant()
-    var isAIProcessing by mutableStateOf(false)
-    var aiFeedbackMessage by mutableStateOf("Xin chào! Bạn vừa chi tiêu gì vậy?")
-    var aiPendingTransaction by mutableStateOf<Transaction?>(null)
+    private val draftPresenter = com.example.walletwise.presentation.transaction.TransactionDraftPresenter(
+        viewModelScope,
+        com.example.walletwise.domain.service.LocalTransactionTextAnalyzer(com.example.walletwise.data.draft.AndroidDraftDateTimeProvider()),
+        categories,
+        { transaction ->
+            val result = this.transactionWriter.add(transaction, null, getApplicationContextForDraft())
+            if (result.getOrNull() == true && auth.currentUser?.uid == transaction.userId) calculateAndGetStreak()
+            result
+        }
+    )
+    val aiDraftState = draftPresenter.state
+    val receiptRecognition = com.example.walletwise.data.draft.AndroidReceiptRecognition(viewModelScope, categories)
+    private var draftContext: Context? = null
+    fun attachDraftContext(context: Context) { draftContext = context.applicationContext }
+    private fun getApplicationContextForDraft(): Context = requireNotNull(draftContext)
+    fun editAIDraft(draft: com.example.walletwise.domain.model.TransactionDraft) = draftPresenter.edit(draft)
+    fun confirmAIDraft() = draftPresenter.confirm()
+    fun newAIDraft() = draftPresenter.newDraft()
+    fun acceptReceiptDraft(receipt: com.example.walletwise.domain.model.ReceiptTransactionDraft) = draftPresenter.acceptReceiptAutomatically(receipt)
 
     init {
         viewModelScope.launch {
             categorySessionState.collect { _categories.value = it.categories }
         }
         loadTransactions()
-        loadUserProfile()
         checkAndGenerateFakeData()
         checkCurrentStreakStatus()
         fetchCategories()
@@ -188,9 +201,17 @@ class TransactionViewModel(
         refreshBudgetSession()
 
         authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            draftPresenter.setUserId(firebaseAuth.currentUser?.uid)
+            receiptRecognition.setUserId(firebaseAuth.currentUser?.uid)
+            if (activeWriteUserId != firebaseAuth.currentUser?.uid) {
+                activeWriteUserId = firebaseAuth.currentUser?.uid
+                writeGeneration++
+                transactionWriteJob?.cancel()
+                _isLoading.value = false
+                transactionToEdit = null
+            }
             if (firebaseAuth.currentUser != null) {
                 loadTransactions()
-                loadUserProfile()
                 checkCurrentStreakStatus()
                 fetchCategories()
                 fetchReminders()
@@ -385,10 +406,13 @@ class TransactionViewModel(
                 } else {
                     null
                 },
-                sortOrder = TransactionListSortOrder.NEWEST_FIRST
+                sortOrder = TransactionListSortOrder.NEWEST_FIRST,
+                searchQuery = transactionListState.value.filters.searchQuery
             )
         )
     }
+
+    fun updateTransactionSearchQuery(query: String) = transactionListPresenter.updateSearchQuery(query)
 
     fun refreshTransactionList() = transactionSessionController.refresh()
 
@@ -413,6 +437,10 @@ class TransactionViewModel(
         )
     }
 
+    fun selectBudgetMonth(monthKey: String) {
+        budgetSessionController.setSession(auth.currentUser?.uid, monthKey)
+    }
+
     fun createSmartBudgetPresenter(scope: CoroutineScope): SmartBudgetPresenter {
         refreshBudgetSession()
         return SmartBudgetPresenter(
@@ -420,66 +448,20 @@ class TransactionViewModel(
             budgetSession = budgetSessionState,
             transactions = transactions,
             repository = budgetRepository,
-            dateProvider = budgetDateProvider
+            dateProvider = budgetDateProvider,
+            onMonthSelected = ::selectBudgetMonth,
+            mappingRepository = com.example.walletwise.data.repository.FinancialMappingRepositoryImpl(),
+            categories = categories,
+            categorySession = categorySessionState
         )
     }
 
-    fun processAITransaction(userInput: String) {
-        viewModelScope.launch {
-            isAIProcessing = true
-            aiFeedbackMessage = "Đang suy nghĩ..."
-            aiPendingTransaction = null
-
-            val jsonString = aiAssistant.analyzeTransactionText(userInput)
-
-            if (jsonString != null) {
-                try {
-                    val cleanJson = jsonString.replace("```json", "").replace("```", "").trim()
-                    val jsonObject = JSONObject(cleanJson)
-                    val missingPrompt = jsonObject.optString("missing_prompt", "")
-
-                    if (missingPrompt.isNotEmpty()) {
-                        aiFeedbackMessage = missingPrompt
-                    } else {
-                        val amount = jsonObject.optDouble("amount", 0.0)
-                        val category = jsonObject.optString("category", "Khác")
-                        val type = jsonObject.optString("type", "Chi")
-                        val paymentMethod = jsonObject.optString("paymentMethod", "Tiền mặt")
-                        val note = jsonObject.optString("note", "")
-
-                        aiPendingTransaction = Transaction(
-                            amount = amount,
-                            category = category,
-                            type = type,
-                            paymentMethod = paymentMethod,
-                            note = note,
-                            timestamp = System.currentTimeMillis()
-                        )
-                        aiFeedbackMessage = "Tôi đã phân tích xong. Bạn xem thông tin đã chính xác chưa nhé!"
-                    }
-                } catch (e: Exception) {
-                    val errorMessage = e.message ?: ""
-                    if (errorMessage.contains("high demand") || errorMessage.contains("503")) {
-                        aiFeedbackMessage = "AI đang có quá nhiều người sử dụng. Bạn vui lòng thử lại sau vài phút nhé!"
-                    } else if (errorMessage.contains("Quota") || errorMessage.contains("limit")) {
-                        aiFeedbackMessage = "Đã hết lượt sử dụng AI miễn phí hôm nay."
-                    } else {
-                        aiFeedbackMessage = "Xin lỗi, tôi chưa hiểu rõ. Bạn nói lại cụ thể khoản tiền và mục đích nhé!"
-                    }
-                    e.printStackTrace()
-                }
-            } else {
-                aiFeedbackMessage = "Lỗi kết nối AI. Vui lòng thử lại!"
-            }
-            isAIProcessing = false
-        }
+    fun processAITransaction(userInput: String, source: com.example.walletwise.domain.model.DraftSource = com.example.walletwise.domain.model.DraftSource.TEXT) {
+        draftPresenter.setUserId(auth.currentUser?.uid)
+        draftPresenter.submitAutomatically(userInput, source)
     }
 
-    fun resetAIState() {
-        aiFeedbackMessage = "Xin chào! Bạn vừa chi tiêu gì vậy?"
-        aiPendingTransaction = null
-    }
-
+    fun resetAIState() { draftPresenter.cancelAnalysis(); receiptRecognition.cancel() }
     fun addTransaction(
         amount: Double,
         type: String,
@@ -488,29 +470,42 @@ class TransactionViewModel(
         paymentMethod: String,
         imageUri: Uri?,
         context: Context,
+        draftId: String = java.util.UUID.randomUUID().toString(),
+        transactionTimestamp: Long = System.currentTimeMillis(),
+        expectedUserId: String? = auth.currentUser?.uid,
         onSuccess: () -> Unit
     ) {
-        viewModelScope.launch {
-            _isLoading.value = true
-
+        if (_isLoading.value || expectedUserId == null || expectedUserId != auth.currentUser?.uid) return
+        _isLoading.value = true
+        val version = writeGeneration
+        transactionWriteJob = viewModelScope.launch {
             val trans = Transaction(
+                id = draftId,
+                userId = expectedUserId,
                 amount = amount,
                 type = type,
                 category = category,
                 note = note,
-                paymentMethod = paymentMethod
+                paymentMethod = paymentMethod,
+                timestamp = transactionTimestamp,
+                categoryId = categories.value.firstOrNull { it.type == type && it.name == category }?.id.orEmpty()
             )
 
-            transactionWriter.add(trans, imageUri, context)
-                .onSuccess {
+            val result = kotlinx.coroutines.withTimeoutOrNull(15_000L) { transactionWriter.add(trans, imageUri, context) }
+                ?: Result.failure<Boolean>(IllegalStateException("Acknowledgement timeout"))
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (version != writeGeneration) return@launch
+            result
+                .onSuccess { written ->
+                    if (!written || auth.currentUser?.uid != expectedUserId) return@onSuccess
                     calculateAndGetStreak() // Tự động cập nhật lửa
                     loadTransactions()
                     android.widget.Toast.makeText(context, "Thêm giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
                     onSuccess()
                 }
                 .onFailure {
-                    Log.e("ADD_TRANSACTION", "ERROR", it)
-                    android.widget.Toast.makeText(context, "Lỗi thêm giao dịch: ${it.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+                    Log.e("ADD_TRANSACTION", "Write failed (details redacted)")
+                    if (auth.currentUser?.uid == expectedUserId) android.widget.Toast.makeText(context, "Chưa nhận được xác nhận lưu. Hãy thử lại cùng bản nháp.", android.widget.Toast.LENGTH_LONG).show()
                 }
             _isLoading.value = false
         }
@@ -535,41 +530,29 @@ class TransactionViewModel(
         context: Context,
         onSuccess: () -> Unit
     ) {
-        viewModelScope.launch {
-            _isLoading.value = true
-
-            transactionWriter.update(transaction, imageUri, context)
-                .onSuccess {
+        val expectedUserId = auth.currentUser?.uid
+        if (_isLoading.value || expectedUserId == null || transaction.userId != expectedUserId) return
+        _isLoading.value = true
+        val version = writeGeneration
+        transactionWriteJob = viewModelScope.launch {
+            val result = kotlinx.coroutines.withTimeoutOrNull(15_000L) { transactionWriter.update(transaction, imageUri, context) }
+                ?: Result.failure<Boolean>(IllegalStateException("Acknowledgement timeout"))
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (version != writeGeneration) return@launch
+            result
+                .onSuccess { written ->
+                    if (!written || auth.currentUser?.uid != expectedUserId) return@onSuccess
                     calculateAndGetStreak() // Cập nhật lửa
                     loadTransactions()
                     android.widget.Toast.makeText(context, "Cập nhật giao dịch thành công!", android.widget.Toast.LENGTH_SHORT).show()
                     onSuccess()
                 }
                 .onFailure {
-                    Log.e("UPDATE_TRANSACTION", "ERROR", it)
-                    android.widget.Toast.makeText(context, "Lỗi cập nhật: ${it.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+                    Log.e("UPDATE_TRANSACTION", "Write failed (details redacted)")
+                    if (auth.currentUser?.uid == expectedUserId) android.widget.Toast.makeText(context, "Chưa nhận được xác nhận cập nhật. Hãy thử lại.", android.widget.Toast.LENGTH_LONG).show()
                 }
             _isLoading.value = false
         }
-    }
-
-    fun loadUserProfile() {
-        val uid = auth.currentUser?.uid ?: return
-        profileListener?.remove()
-        profileListener = db.collection("users").document(uid)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("FIRESTORE_ERROR", "Unable to listen to user profile", error)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    _userProfile.value = runCatching {
-                        snapshot.toObject(com.example.walletwise.domain.model.User::class.java)
-                    }.onFailure {
-                        Log.e("FIRESTORE_ERROR", "Ignoring invalid user profile", it)
-                    }.getOrNull()
-                }
-            }
     }
 
     private fun fetchCategories() {
@@ -635,7 +618,6 @@ class TransactionViewModel(
     }
 
     override fun onCleared() {
-        profileListener?.remove()
         transactionListPresenter.close()
         transactionSessionController.close()
         categorySessionController.close()
@@ -643,6 +625,9 @@ class TransactionViewModel(
         reminderSessionController.close()
         recurringSessionController.close()
         authStateListener?.let(auth::removeAuthStateListener)
+        transactionWriteJob?.cancel()
+        draftPresenter.close()
+        receiptRecognition.close()
         super.onCleared()
     }
 

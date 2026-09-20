@@ -9,6 +9,13 @@ val firebaseEmulatorRequested = providers.environmentVariable("USE_FIREBASE_EMUL
     .map { it.equals("true", ignoreCase = true) }
     .orElse(false)
 
+val imgbbApiKey = providers.environmentVariable("IMGBB_API_KEY")
+    .orElse(providers.gradleProperty("imgbbApiKey"))
+    .orElse("")
+
+fun String.asBuildConfigString(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.example.walletwise"
     compileSdk {
@@ -21,6 +28,9 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+
+        // Credentials stay outside source control. An empty value disables uploads safely.
+        buildConfigField("String", "IMGBB_API_KEY", imgbbApiKey.get().asBuildConfigString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -75,6 +85,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

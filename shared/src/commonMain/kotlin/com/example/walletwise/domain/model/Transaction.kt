@@ -11,5 +11,6 @@ data class Transaction(
     val category: String = "",
     val note: String = "",
     val timestamp: Long = currentEpochMilliseconds(),
-    val imageUrl: String = "" // Đường dẫn ảnh local hoặc Firebase Storage
+    val imageUrl: String = "", // Đường dẫn ảnh local hoặc Firebase Storage
+    val categoryId: String = "" // Optional stable reference; legacy records still use category name.
 )

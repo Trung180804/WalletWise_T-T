@@ -99,7 +99,7 @@ fun ProfileMainContent(
     when (val loadState = state.loadState) {
         ProfileLoadState.Loading -> ProfileStatusContent(isLoading = true)
         is ProfileLoadState.Error -> ProfileStatusContent(message = loadState.message)
-        ProfileLoadState.Data -> ProfileMainData(
+        ProfileLoadState.Data, ProfileLoadState.Empty -> ProfileMainData(
             state = state,
             onNavigate = onNavigate,
             onLogoutRequest = onLogoutRequest,
@@ -152,6 +152,9 @@ private fun ProfileMainData(
         )
 
         Spacer(Modifier.height(16.dp))
+        if (state.loadState == ProfileLoadState.Empty) {
+            Text("Hồ sơ chưa có dữ liệu. Bạn có thể cập nhật thông tin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text(
             text = displayName,
             color = MaterialTheme.colorScheme.onBackground,
@@ -241,7 +244,7 @@ fun EditProfileContent(
         when (val loadState = state.loadState) {
             ProfileLoadState.Loading -> ProfileStatusContent(isLoading = true)
             is ProfileLoadState.Error -> ProfileStatusContent(message = loadState.message)
-            ProfileLoadState.Data -> EditProfileData(
+            ProfileLoadState.Data, ProfileLoadState.Empty -> EditProfileData(
                 state = state,
                 onPickAvatar = onPickAvatar,
                 onCopyUserId = onCopyUserId,

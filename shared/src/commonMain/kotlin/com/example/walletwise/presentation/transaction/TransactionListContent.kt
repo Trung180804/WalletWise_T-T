@@ -17,7 +17,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
@@ -45,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -60,11 +65,12 @@ fun TransactionListContent(
     onEdit: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
+    emptyMessage: String = "Không có giao dịch nào.",
+    compactRows: Boolean = false,
     imageContent: TransactionImageContent? = null,
     readOnly: Boolean = false,
     selectedTransactionId: String? = null,
-    onDetailDismissed: () -> Unit = {},
-    emptyImageLabel: String = "Không có ảnh"
+    onDetailDismissed: () -> Unit = {}
 ) {
     var selectedRow by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
     var pendingDelete by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
@@ -76,7 +82,7 @@ fun TransactionListContent(
             onRetry = onRetry,
             modifier = modifier
         )
-        state.rows.isEmpty() -> TransactionEmpty(modifier)
+        state.rows.isEmpty() -> TransactionEmpty(emptyMessage, modifier)
         else -> Column(modifier = modifier) {
             state.repositoryError?.let { error ->
                 Text(
@@ -86,7 +92,20 @@ fun TransactionListContent(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
-            LazyVerticalGrid(
+            if (compactRows) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listItems(state.rows, key = TransactionRowViewData::id) { row ->
+                        CompactTransactionRow(row) {
+                            if (!readOnly) selectedRow = row
+                            onRowSelected(row.id)
+                        }
+                    }
+                }
+            } else LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 100.dp),
@@ -97,7 +116,6 @@ fun TransactionListContent(
                     TransactionCard(
                         row = row,
                         imageContent = imageContent,
-                        emptyImageLabel = emptyImageLabel,
                         onClick = {
                             if (!readOnly) selectedRow = row
                             onRowSelected(row.id)
@@ -113,7 +131,6 @@ fun TransactionListContent(
             row = row,
             imageContent = imageContent,
             readOnly = readOnly,
-            emptyImageLabel = emptyImageLabel,
             onDismiss = { selectedRow = null; onDetailDismissed() },
             onEdit = {
                 selectedRow = null
@@ -150,6 +167,23 @@ fun TransactionListContent(
 }
 
 @Composable
+private fun CompactTransactionRow(row: TransactionRowViewData, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(row.category.ifBlank { row.type }, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(row.amountText, fontWeight = FontWeight.Bold,
+                    color = if (row.isIncome) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error)
+            }
+            if (row.note.isNotBlank()) Text(row.note, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${row.fullDateText} • ${row.paymentMethod}", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
 private fun TransactionLoading(modifier: Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
@@ -157,9 +191,9 @@ private fun TransactionLoading(modifier: Modifier) {
 }
 
 @Composable
-private fun TransactionEmpty(modifier: Modifier) {
+private fun TransactionEmpty(message: String, modifier: Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Không có giao dịch nào.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -183,7 +217,6 @@ private fun TransactionError(message: String, onRetry: () -> Unit, modifier: Mod
 @Composable
 private fun TransactionCard(
     row: TransactionRowViewData,
-    emptyImageLabel: String,
     imageContent: TransactionImageContent?,
     onClick: () -> Unit
 ) {
@@ -196,7 +229,7 @@ private fun TransactionCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(12.dp)) {
-            TransactionImage(row, emptyImageLabel, imageContent, Modifier.fillMaxWidth().height(80.dp))
+            TransactionImage(row, imageContent, Modifier.fillMaxWidth().height(80.dp))
             Spacer(Modifier.height(12.dp))
             Text(row.amountText, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = amountColor)
             Spacer(Modifier.height(4.dp))
@@ -230,7 +263,6 @@ private fun TransactionCard(
 @Composable
 private fun TransactionImage(
     row: TransactionRowViewData,
-    emptyImageLabel: String,
     imageContent: TransactionImageContent?,
     modifier: Modifier
 ) {
@@ -241,11 +273,7 @@ private fun TransactionImage(
         if (row.hasImage && imageContent != null) {
             imageContent(row.imageUrl, Modifier.fillMaxSize())
         } else {
-            Text(
-                if (row.hasImage) "Có ảnh" else emptyImageLabel,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            NoTransactionImage(Modifier.fillMaxSize())
         }
     }
 }
@@ -255,7 +283,6 @@ private fun TransactionDetailDialog(
     row: TransactionRowViewData,
     imageContent: TransactionImageContent?,
     readOnly: Boolean,
-    emptyImageLabel: String,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -279,26 +306,31 @@ private fun TransactionDetailDialog(
                     }
                 }
                 Spacer(Modifier.height(20.dp))
-                if (row.hasImage) {
-                    TransactionImage(row, emptyImageLabel, imageContent, Modifier.fillMaxWidth().height(160.dp))
-                    Spacer(Modifier.height(20.dp))
-                }
-                Text(row.amountText, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = amountColor)
-                Spacer(Modifier.height(24.dp))
                 Column(
-                    Modifier.fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                        .padding(16.dp)
+                    Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    TransactionInfoRow("Loại giao dịch", row.type, amountColor)
-                    TransactionInfoRow("Danh mục", row.category)
-                    TransactionInfoRow("Nguồn tiền", row.paymentMethod)
-                    TransactionInfoRow("Thời gian", row.fullDateText)
-                    if (row.note.isNotBlank()) {
-                        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                        Text("Ghi chú:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                        Spacer(Modifier.height(4.dp))
-                        Text(row.note, fontSize = 14.sp)
+                    if (row.hasImage || imageContent != null) {
+                        TransactionImage(row, imageContent, Modifier.fillMaxWidth().height(160.dp))
+                        Spacer(Modifier.height(20.dp))
+                    }
+                    Text(row.amountText, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = amountColor)
+                    Spacer(Modifier.height(24.dp))
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                            .padding(16.dp)
+                    ) {
+                        TransactionInfoRow("Loại giao dịch", row.type, amountColor)
+                        TransactionInfoRow("Danh mục", row.category)
+                        TransactionInfoRow("Nguồn tiền", row.paymentMethod)
+                        TransactionInfoRow("Thời gian", row.fullDateText)
+                        if (row.note.isNotBlank()) {
+                            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                            Text("Ghi chú:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(row.note, fontSize = 14.sp)
+                        }
                     }
                 }
                 Spacer(Modifier.height(24.dp))

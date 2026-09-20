@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 
 class AuthProfileSessionController(
     private val scope: CoroutineScope,
@@ -31,6 +33,7 @@ class AuthProfileSessionController(
     private var profileLoadJob: Job? = null
     private var observedUserId: String? = null
     private var createMissingProfile = false
+    private var generation = 0L
 
     fun start() {
         if (authJob?.isActive == true) return
@@ -53,25 +56,30 @@ class AuthProfileSessionController(
             }
             return
         }
+        generation++
+        val sessionGeneration = generation
         profileJob?.cancel()
         profileLoadJob?.cancel()
         observedUserId = session.userId
         createMissingProfile = ensureExists
-        _state.value = _state.value.copy(
+        _state.value = AuthProfileUiState(
             authStatus = AuthStatus.Authenticated(session),
-            profile = _state.value.profile?.takeIf { it.id == session.userId }
-                ?: session.defaultUser()
+            profile = session.defaultUser()
         )
         profileJob = scope.launch {
             observeUserProfile(session.userId).collect { result ->
+                if (generation != sessionGeneration || observedUserId != session.userId) return@collect
                 when (result) {
                     is RepositoryResult.Success -> if (result.value != null) {
+                        if (result.value.id != session.userId) return@collect
                         _state.value = _state.value.copy(
                             profile = result.value,
                             operation = AuthOperationState.Idle
                         )
                     } else if (createMissingProfile) {
                         ensureProfile(session)
+                    } else {
+                        _state.value = _state.value.copy(profile = session.defaultUser(), operation = AuthOperationState.Idle)
                     }
                     is RepositoryResult.Failure ->
                         _state.value = _state.value.copy(
@@ -90,6 +98,7 @@ class AuthProfileSessionController(
     }
 
     fun close() {
+        generation++
         profileJob?.cancel()
         profileJob = null
         profileLoadJob?.cancel()
@@ -98,9 +107,11 @@ class AuthProfileSessionController(
         authJob = null
         observedUserId = null
         createMissingProfile = false
+        _state.value = AuthProfileUiState(authStatus = AuthStatus.Unauthenticated)
     }
 
     private fun clearProfile() {
+        generation++
         profileJob?.cancel()
         profileJob = null
         profileLoadJob?.cancel()
@@ -112,8 +123,12 @@ class AuthProfileSessionController(
 
     private fun ensureProfile(session: AuthSession) {
         if (profileLoadJob?.isActive == true) return
+        val sessionGeneration = generation
         profileLoadJob = scope.launch {
-            when (val initial = getUserProfile(session)) {
+            val initial = getUserProfile(session)
+            coroutineContext.ensureActive()
+            if (generation != sessionGeneration || observedUserId != session.userId) return@launch
+            when (initial) {
                 is AuthUseCaseResult.Success ->
                     _state.value = _state.value.copy(
                         profile = initial.value,

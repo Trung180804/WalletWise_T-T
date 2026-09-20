@@ -40,11 +40,11 @@ internal object FirebaseEmulatorSafety {
     ): FirebaseEmulatorEndpoint? {
         if (!requested) return null
         require(debuggable) { "Firebase Emulator is forbidden outside a debuggable build" }
-        require(projectId.startsWith("demo-") && projectId.length > "demo-".length) {
-            "Only a demo-* Firebase project is allowed"
+        require(projectId == "demo-walletwise") {
+            "Only the isolated demo-walletwise project is allowed"
         }
         require(host.isNotBlank()) { "Firebase Emulator host is required" }
-        require(firestorePort in 1..65_535 && authPort in 1..65_535) {
+        require(firestorePort == 8080 && authPort == 9099) {
             "Firebase Emulator ports are invalid"
         }
         require(runningOnAndroidEmulator || hostWasExplicitlyConfigured) {
@@ -52,6 +52,9 @@ internal object FirebaseEmulatorSafety {
         }
         if (runningOnAndroidEmulator && !hostWasExplicitlyConfigured) {
             require(host == "10.0.2.2") { "Android Emulator must use 10.0.2.2 by default" }
+        }
+        require(host == "localhost" || host.matches(Regex("^(127\\.0\\.0\\.1|10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}|192\\.0\\.2\\.[0-9]{1,3}|172\\.(1[6-9]|2[0-9]|3[01])\\.[0-9]{1,3}\\.[0-9]{1,3})$"))) {
+            "Firebase Emulator requires a loopback or development-network host"
         }
         return FirebaseEmulatorEndpoint(projectId, host, firestorePort, authPort)
     }

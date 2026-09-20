@@ -42,28 +42,20 @@ object RecurringScheduleCalculator {
         recurring: RecurringTransaction,
         now: ReminderLocalDateTime
     ): RecurringOccurrence? {
-        val occurrence = latestDueOccurrenceIgnoringLimit(recurring, now) ?: return null
-        val limit = executionLimit(recurring)
-        if (limit == Long.MAX_VALUE || occurrence.index < limit) return occurrence
-
-        val lastAllowedIndex = limit - 1L
-        val start = startAt(recurring) ?: return null
-        return occurrenceAt(start, frequency(recurring.frequency), lastAllowedIndex)?.let {
-            RecurringOccurrence(lastAllowedIndex, it)
-        }
+        return latestDueOccurrenceIgnoringLimit(recurring, now)
     }
 
-    /** Returns the next occurrence strictly after [now], or null after a finite schedule ends. */
+    /** Legacy timesCount is readable metadata; an enabled schedule always continues. */
     fun nextOccurrence(
         recurring: RecurringTransaction,
         now: ReminderLocalDateTime
     ): RecurringOccurrence? {
         val start = startAt(recurring) ?: return null
-        if (now < start) return withinLimit(recurring, 0L, start)
+        if (now < start) return RecurringOccurrence(0L, start)
         val latest = latestDueOccurrenceIgnoringLimit(recurring, now) ?: return null
         val nextIndex = latest.index + 1L
         val next = occurrenceAt(start, frequency(recurring.frequency), nextIndex) ?: return null
-        return withinLimit(recurring, nextIndex, next)
+        return RecurringOccurrence(nextIndex, next)
     }
 
     fun occurrenceKey(occurrence: RecurringOccurrence): String = occurrence.at.date.toIsoString()
@@ -85,21 +77,6 @@ object RecurringScheduleCalculator {
         val occurrence = parseIsoDate(occurrenceKey) ?: return false
         return marker >= occurrence
     }
-
-    fun hasReachedExecutionLimit(recurring: RecurringTransaction, occurrenceIndex: Long): Boolean {
-        val limit = executionLimit(recurring)
-        return limit != Long.MAX_VALUE && occurrenceIndex + 1L >= limit
-    }
-
-    fun executionLimit(recurring: RecurringTransaction): Long =
-        recurring.timesCount.toLongOrNull()?.takeIf { it > 0L } ?: Long.MAX_VALUE
-
-    private fun withinLimit(
-        recurring: RecurringTransaction,
-        index: Long,
-        at: ReminderLocalDateTime
-    ): RecurringOccurrence? =
-        if (index < executionLimit(recurring)) RecurringOccurrence(index, at) else null
 
     private fun latestDueOccurrenceIgnoringLimit(
         recurring: RecurringTransaction,

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,8 +43,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,10 +77,31 @@ fun HomeScreen(
     val transactions by viewModel.transactions.collectAsState()
     val reminders by viewModel.reminders.collectAsState()
     val recurringTransactions by viewModel.recurringTransactions.collectAsState()
+    val transactionListState by viewModel.transactionListState.collectAsState()
+    val transactionSessionState by viewModel.transactionSessionState.collectAsState()
     val formatMoney = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("vi-VN"))
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var isSubScreenOpen by remember { mutableStateOf(false) }
+    var isSearchMode by remember(transactionSessionState.userId) { mutableStateOf(false) }
+    val searchQuery = transactionListState.filters.searchQuery
+    val searchFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    fun closeSearch() {
+        keyboardController?.hide()
+        viewModel.updateTransactionSearchQuery("")
+        isSearchMode = false
+    }
+    BackHandler(enabled = isSearchMode && selectedTab == 0) { closeSearch() }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != 0 && isSearchMode) closeSearch()
+    }
+    LaunchedEffect(isSearchMode) {
+        if (isSearchMode) {
+            searchFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     val filters = listOf("Tất cả", "Tiền mặt", "Chuyển khoản", "Thẻ tín dụng")
     var selectedFilter by remember { mutableStateOf(filters[0]) }
@@ -126,8 +153,34 @@ fun HomeScreen(
     )
 
     Scaffold(
+        modifier = if (isSearchMode && selectedTab == 0) Modifier.imePadding() else Modifier,
         topBar = {
             if (selectedTab == 0) {
+                if (isSearchMode) {
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(onClick = ::closeSearch) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Đóng tìm kiếm")
+                            }
+                        },
+                        title = {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = viewModel::updateTransactionSearchQuery,
+                                modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                                placeholder = { Text("Tìm giao dịch") },
+                                singleLine = true,
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { viewModel.updateTransactionSearchQuery("") }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "Xóa nội dung tìm kiếm")
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    )
+                } else {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -167,7 +220,7 @@ fun HomeScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                     actions = {
-                        IconButton(onClick = { /* TODO */ }) {
+                        IconButton(onClick = { isSearchMode = true }) {
                             Icon(Icons.Default.Search, contentDescription = "Tìm kiếm", tint = textColor)
                         }
                         IconButton(onClick = { showLogoutDialog = true }) {
@@ -175,10 +228,11 @@ fun HomeScreen(
                         }
                     }
                 )
+                }
             }
         },
         floatingActionButton = {
-            if (selectedTab == 0 && !isSubScreenOpen) {
+            if (selectedTab == 0 && !isSubScreenOpen && !isSearchMode) {
                 Box(
                     modifier = Modifier
                         .offset(y = (-30).dp)
@@ -193,7 +247,7 @@ fun HomeScreen(
             }
         },
         bottomBar = {
-            if (!isSubScreenOpen) {
+            if (!isSubScreenOpen && !isSearchMode) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -277,6 +331,7 @@ fun HomeScreen(
                     */
 
                     Column(modifier = Modifier.fillMaxSize().background(topHeaderBrush)) {
+                        if (!isSearchMode) {
                         Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
 
                             HomeBannerCarousel(
@@ -308,6 +363,7 @@ fun HomeScreen(
                                 }
                             }
                         }
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
                         Surface(
@@ -316,7 +372,15 @@ fun HomeScreen(
                             color = bgColor
                         ) {
                             Column(modifier = Modifier.padding(top = 10.dp, start = 16.dp, end = 16.dp)) {
-                                if (selectedDateFilter != null) {
+                                if (isSearchMode) {
+                                    val dateLabel = selectedDateFilter?.let { "Giao dịch ngày ${it.dayOfMonth}/${it.monthValue}" }
+                                        ?: "Giao dịch 3 ngày gần đây"
+                                    Text(
+                                        text = dateLabel + if (selectedFilter != filters[0]) " · $selectedFilter" else "",
+                                        color = subTextColor, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                } else if (selectedDateFilter != null) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.padding(bottom = 8.dp)
@@ -340,7 +404,7 @@ fun HomeScreen(
                                     Text(text = "Giao dịch 3 ngày gần đây", color = subTextColor, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
                                 }
 
-                                LazyRow(
+                                if (!isSearchMode) LazyRow(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
@@ -360,12 +424,18 @@ fun HomeScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(if (isSearchMode) 8.dp else 16.dp))
 
                                 AndroidTransactionList(
                                     viewModel = viewModel,
                                     onNavigateToAdd = onNavigateToAdd,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
+                                    compactRows = isSearchMode,
+                                    emptyMessage = if (isSearchMode && searchQuery.isNotBlank()) {
+                                        "Không tìm thấy giao dịch phù hợp"
+                                    } else {
+                                        "Không có giao dịch nào."
+                                    }
                                 )
                             }
                         }
@@ -389,61 +459,11 @@ fun HomeScreen(
             ModalBottomSheet(
                 onDismissRequest = { showAIModal = false; viewModel.resetAIState() },
                 sheetState = sheetState,
-                containerColor = cardColor
+                containerColor = Color.White,
+                contentColor = Color(0xFF25232A),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp, start = 16.dp, end = 16.dp).imePadding()) {
-                    Text(text = "✨ Trợ lý Tài chính WalletWise", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor)
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (viewModel.isAIProcessing) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = cyanColor)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = "Trợ lý đang suy nghĩ...", color = subTextColor)
-                        }
-                    } else {
-                        Text(text = viewModel.aiFeedbackMessage, fontSize = 16.sp, color = Color(0xFFFA3B70), fontWeight = FontWeight.Medium)
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (viewModel.aiPendingTransaction != null) {
-                        val tx = viewModel.aiPendingTransaction!!
-                        val context = LocalContext.current
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = cyanColor.copy(alpha = 0.1f),
-                            border = BorderStroke(1.dp, cyanColor.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = "📝 Giao dịch mới:", fontWeight = FontWeight.Bold, color = textColor)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(text = "• Số tiền: ${formatMoney.format(tx.amount)}", color = textColor)
-                                Text(text = "• Phân loại: ${tx.category} (${tx.type})", color = textColor)
-                                Text(text = "• Nguồn: ${tx.paymentMethod}", color = textColor)
-                                Text(text = "• Ghi chú: ${tx.note}", color = textColor)
-
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.addTransaction(
-                                            amount = tx.amount, type = tx.type, category = tx.category,
-                                            note = tx.note, paymentMethod = tx.paymentMethod, imageUri = null, context = context
-                                        ) { showAIModal = false; viewModel.resetAIState() }
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                                ) {
-                                    Text(text = "Xác nhận & Lưu", color = Color.White, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-
-                    AIAssistantInputBar(textColor = textColor, onSend = { userInput -> viewModel.processAITransaction(userInput) })
-                }
+                MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFFFA3B70))) { AITransactionSheet(viewModel) }
             }
         }
 
@@ -462,44 +482,6 @@ fun HomeScreen(
                     TextButton(onClick = { showLogoutDialog = false }) { Text(text = "Hủy", color = subTextColor, fontWeight = FontWeight.Bold) }
                 }
             )
-        }
-    }
-}
-
-@Composable
-fun AIAssistantInputBar(textColor: Color, onSend: (String) -> Unit) {
-    var textInput by remember { mutableStateOf(TextFieldValue("")) }
-    val context = LocalContext.current
-    val speechLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spokenText = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (spokenText != null) { textInput = TextFieldValue(spokenText) }
-        }
-    }
-    fun startListening() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Đang nghe... (VD: Đổ xăng 50k)")
-        }
-        try { speechLauncher.launch(intent) } catch (e: Exception) { android.widget.Toast.makeText(context, "Thiết bị không hỗ trợ giọng nói", android.widget.Toast.LENGTH_SHORT).show() }
-    }
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = textInput, onValueChange = { textInput = it }, modifier = Modifier.weight(1f),
-            placeholder = { Text(text = "Nhập nội dung...", color = Color.Gray) }, shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFF9C27B0),
-                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                focusedTextColor = textColor,
-                unfocusedTextColor = textColor
-            ), maxLines = 4
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        if (textInput.text.isBlank()) {
-            IconButton(onClick = { startListening() }, modifier = Modifier.size(50.dp).background(Color(0xFFFA3B70), CircleShape)) { Icon(Icons.Default.Mic, contentDescription = "Mic", tint = Color.White) }
-        } else {
-            IconButton(onClick = { onSend(textInput.text); textInput = TextFieldValue("") }, modifier = Modifier.size(50.dp).background(Color(0xFF4CAF50), CircleShape)) { Icon(Icons.Default.Send, contentDescription = "Gửi", tint = Color.White) }
         }
     }
 }
