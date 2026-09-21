@@ -64,7 +64,12 @@ fun TransactionListContent(
     readOnly: Boolean = false,
     selectedTransactionId: String? = null,
     onDetailDismissed: () -> Unit = {},
-    emptyImageLabel: String = "Không có ảnh"
+    emptyImageLabel: String = "Không có ảnh",
+    externalSelection: Boolean = false,
+    canModify: (String) -> Boolean = { true },
+    onDeleteRequested: ((String) -> Unit)? = null,
+    readOnlyReason: String? = null,
+    actionsEnabled: Boolean = true
 ) {
     var selectedRow by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
     var pendingDelete by remember(state.userId) { mutableStateOf<TransactionRowViewData?>(null) }
@@ -99,7 +104,7 @@ fun TransactionListContent(
                         imageContent = imageContent,
                         emptyImageLabel = emptyImageLabel,
                         onClick = {
-                            if (!readOnly) selectedRow = row
+                            if (!readOnly && !externalSelection) selectedRow = row
                             onRowSelected(row.id)
                         }
                     )
@@ -108,11 +113,13 @@ fun TransactionListContent(
         }
     }
 
-    (if (readOnly) selectedTransactionId?.let { id -> state.rows.find { it.id == id } } else selectedRow)?.let { row ->
+    (if (readOnly || externalSelection) selectedTransactionId?.let { id -> state.rows.find { it.id == id } } else selectedRow)?.let { row ->
         TransactionDetailDialog(
             row = row,
             imageContent = imageContent,
-            readOnly = readOnly,
+            readOnly = readOnly || !canModify(row.id),
+            readOnlyReason = readOnlyReason.takeIf { !canModify(row.id) },
+            actionsEnabled = actionsEnabled,
             emptyImageLabel = emptyImageLabel,
             onDismiss = { selectedRow = null; onDetailDismissed() },
             onEdit = {
@@ -121,7 +128,7 @@ fun TransactionListContent(
             },
             onDelete = {
                 selectedRow = null
-                pendingDelete = row
+                if (onDeleteRequested != null) onDeleteRequested(row.id) else pendingDelete = row
             }
         )
     }
@@ -255,6 +262,8 @@ private fun TransactionDetailDialog(
     row: TransactionRowViewData,
     imageContent: TransactionImageContent?,
     readOnly: Boolean,
+    readOnlyReason: String?,
+    actionsEnabled: Boolean,
     emptyImageLabel: String,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
@@ -302,9 +311,11 @@ private fun TransactionDetailDialog(
                     }
                 }
                 Spacer(Modifier.height(24.dp))
+                if (readOnly) readOnlyReason?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (!readOnly) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = onDelete,
+                        enabled = actionsEnabled,
                         modifier = Modifier.weight(1f).height(48.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
                         border = BorderStroke(1.dp, Color.Red),
@@ -314,6 +325,7 @@ private fun TransactionDetailDialog(
                     }
                     Button(
                         onClick = onEdit,
+                        enabled = actionsEnabled,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {

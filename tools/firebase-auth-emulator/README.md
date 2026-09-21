@@ -227,3 +227,57 @@ only the freshly owned demo emulator's fixtures, verifies zero accounts and
 transactions, stops the owned process, and verifies ports 9099/8080/4400/4500
 are closed. It never logs into Firebase CLI, deploys rules, or touches a real
 project. `firestore.rules` is exclusively this demo emulator's read-only policy.
+
+## Checkpoint 5F: shared editor and primary-only mutations
+
+The same controller now owns a shared `TransactionEditorPresenter`. Home's `+ Thêm`
+opens the Compose form; shared detail offers Edit/Delete only for primary records,
+and Delete requires a shared confirmation dialog. Dirty Back asks before discarding;
+loading locks double submit. Success waits for SDK server completion, and Home ignores
+snapshots with pending writes, so failed deletes never optimistically remove items.
+Cancellation suppresses callbacks, not an SDK request that has already been sent.
+
+Input keeps whole VND as raw digits/Long; visual grouping inserts dots with cursor
+mapping. Grouped paste using dots, commas, or spaces is accepted; malformed grouping,
+decimals, negatives, letters, and overflow are rejected. The maximum is 2^53 - 1 so
+conversion to the existing Double model/wire is exact. Existing fractional Double
+amounts remain unchanged when Edit changes another field; the form explains this.
+The transaction model has no currency field. No currency/schema change is made.
+
+Add generates one shared UUID per validated request and reuses it on retries. Swift
+sets the fixed primary document and Android-compatible fields. Update uses updateData
+with only form fields, cannot create a missing document, and preserves image URL and
+unknown fields. Delete verifies the existing primary document before deletion. Every
+native operation checks authoritative Auth UID, path segments, cancellation and late
+completion. Observation provenance `isLegacy` is memory-only, never serialized;
+legacy items remain read-only, without silent copying or migration.
+
+Categories read the existing `users/{uid}/categories` schema through one controller-owned
+listener and the shared category session. The callback repository never seeds/writes
+categories; an empty collection uses the established shared defaults. Edit may retain
+an old category missing from the current list. There is no new category schema or UI.
+The model has no disabled flag; removal/unavailability is handled by retaining the
+saved name in Edit. Add uses only currently valid categories for the selected type.
+
+For 5F, local emulator rules permit validated, owner-scoped primary CRUD while keeping
+categories and legacy client-read-only. **Never deploy these test rules.** SDK warning
+logging is reduced to error level before demo configuration because rejected writes
+can include a document path in SDK warning logs. Our audit prints fixed endpoints and
+status markers only. Release compiles out native adapters/probes and cannot mutate.
+
+After installing the signed Debug app, run the fresh owning harness:
+
+```sh
+python3 tools/firebase-auth-emulator/run_transaction_write_simulator_checks.py \
+  --simulator SIMULATOR_UUID \
+  --artifacts /private/tmp/walletwise-5f-integration \
+  --firebase /path/to/firebase --java-home /path/to/java-home
+```
+
+It checks same-ID retry, 50k Add/75k Edit, image preservation, missing update, Delete/
+Cancel, A-to-B/inflight isolation, Rules denying B read/update/delete of A, persisted
+session/data restore, legacy read-only detail, and zero-account/document/category
+cleanup with all four ports closed. `--interactive` keeps the owned emulator alive
+after SDK checks for native Simulator UI verification; it waits for status-only
+`ui-complete.json` in the fresh temporary artifact directory, then checks and cleans
+up. Never supply such a completion file without actually performing the UI checks.

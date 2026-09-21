@@ -80,7 +80,7 @@ def scan(text):
         raise RuntimeError("STOP: sensitive fixture data appeared in app log")
 
 
-def phase(args, name, users, actions=None):
+def phase(args, name, users, actions=None, probe_flag="WALLETWISE_TRANSACTION_TEST_PHASE"):
     command("xcrun", "simctl", "terminate", args.simulator, BUNDLE, check=False)
     log = args.artifacts / (name + ".raw.log")
     with log.open("w") as output, (args.artifacts / (name + ".stderr.log")).open("w") as errors:
@@ -88,7 +88,7 @@ def phase(args, name, users, actions=None):
         try:
             time.sleep(1)
             env = {k: v for k, v in os.environ.items() if not k.startswith("SIMCTL_CHILD_WALLETWISE_")}
-            flags = {"WALLETWISE_AUTH_EMULATOR": "1", "WALLETWISE_AUTH_PROJECT": PROJECT, "WALLETWISE_AUTH_HOST": "127.0.0.1", "WALLETWISE_AUTH_PORT": "9099", "WALLETWISE_FIRESTORE_EMULATOR": "1", "WALLETWISE_FIRESTORE_PROJECT": PROJECT, "WALLETWISE_FIRESTORE_HOST": "127.0.0.1", "WALLETWISE_FIRESTORE_PORT": "8080", "WALLETWISE_TRANSACTION_TEST_PHASE": name}
+            flags = {"WALLETWISE_AUTH_EMULATOR": "1", "WALLETWISE_AUTH_PROJECT": PROJECT, "WALLETWISE_AUTH_HOST": "127.0.0.1", "WALLETWISE_AUTH_PORT": "9099", "WALLETWISE_FIRESTORE_EMULATOR": "1", "WALLETWISE_FIRESTORE_PROJECT": PROJECT, "WALLETWISE_FIRESTORE_HOST": "127.0.0.1", "WALLETWISE_FIRESTORE_PORT": "8080", probe_flag: name}
             for key, user in users.items():
                 flags["WALLETWISE_TEST_" + key + "_EMAIL"] = user["email"]
                 flags["WALLETWISE_TEST_" + key + "_PASSWORD"] = user["password"]

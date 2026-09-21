@@ -30,12 +30,16 @@ class CategorySessionController(
 
     private var observedUserId: String? = null
     private var observationJob: Job? = null
+    private var generation = 0L
+    private var closed = false
 
     fun setUserId(userId: String?) {
+        if (closed) return
         val normalized = userId?.takeIf { it.isNotBlank() }
         if (normalized == observedUserId && observationJob?.isActive == true) return
 
         observationJob?.cancel()
+        val currentGeneration = ++generation
         observationJob = null
         observedUserId = normalized
 
@@ -51,7 +55,9 @@ class CategorySessionController(
             error = null
         )
         observationJob = scope.launch {
-            when (val ensured = repository.ensureDefaultCategories(normalized, defaults)) {
+            val ensured = repository.ensureDefaultCategories(normalized, defaults)
+            if (closed || generation != currentGeneration) return@launch
+            when (ensured) {
                 is RepositoryResult.Failure -> mutableState.value = mutableState.value.copy(
                     isLoading = false,
                     error = ensured.error
@@ -60,6 +66,7 @@ class CategorySessionController(
             }
 
             repository.observeCategories(normalized).collect { result ->
+                if (closed || generation != currentGeneration) return@collect
                 when (result) {
                     is RepositoryResult.Success -> {
                         if (result.value.isEmpty()) {
@@ -96,8 +103,20 @@ class CategorySessionController(
     }
 
     fun close() {
+        if (closed) return
+        closed = true
+        generation++
         observationJob?.cancel()
         observationJob = null
         observedUserId = null
+        mutableState.value = CategorySessionState(categories = defaults)
+    }
+
+    fun refresh() {
+        val uid = observedUserId ?: return
+        observationJob?.cancel()
+        observationJob = null
+        observedUserId = null
+        setUserId(uid)
     }
 }
