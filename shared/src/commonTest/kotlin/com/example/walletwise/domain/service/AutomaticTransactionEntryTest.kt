@@ -106,4 +106,15 @@ class AutomaticTransactionEntryTest {
         assertEquals(0, writes); assertNull(presenter.state.value.draft?.timestamp)
         presenter.submitAutomatically("17/09/2026"); runCurrent(); assertEquals(1, writes); presenter.close()
     }
+    @Test fun categoryDefaultsCoverEveryActiveCategoryAndBothFallbacks() {
+        BudgetRule.entries.forEach { rule ->
+            val keys = FinancialMethods.forRule(rule).buckets.map { it.key }
+            (DefaultCategories.filter { it.type == "Chi" }.map { it.name } + "Custom").forEach { name ->
+                assertTrue(FinancialCategoryMapping.bucket(name, rule, emptyMap()) in keys)
+            }
+        }
+        assertEquals("needs", FinancialCategoryMapping.bucket("  ĂN   UỐNG ", BudgetRule.FIFTY_THIRTY_TWENTY, emptyMap()))
+        assertEquals("needs", FinancialCategoryMapping.bucket("Giao duc thiet yeu", BudgetRule.FIFTY_THIRTY_TWENTY, emptyMap()))
+        assertEquals("savings", FinancialCategoryMapping.bucket("Quỹ dự phòng", BudgetRule.FIFTY_THIRTY_TWENTY, emptyMap()))
+    }
 }
