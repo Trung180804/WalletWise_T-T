@@ -6,6 +6,11 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    // Emulator-only Profile checkpoint: read/create the signed-in user's profile.
+    match /users/{userId} {
+      allow read, write: if ownsUserData(userId);
+    }
+
     // The failure prefix is reserved for the emulator-only 4J receiver test.
     // It forces the atomic transaction to fail without weakening production
     // rules or requiring a production credential.

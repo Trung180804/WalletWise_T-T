@@ -3,6 +3,7 @@ package com.example.walletwise.reliability
 import com.example.walletwise.BuildConfig
 import com.example.walletwise.data.draft.AndroidDraftDateTimeProvider
 import com.example.walletwise.data.repository.TransactionRepositoryImpl
+import com.example.walletwise.data.repository.FinancialMappingRepositoryImpl
 import com.example.walletwise.domain.model.*
 import com.example.walletwise.domain.repository.ImageUploader
 import com.example.walletwise.domain.service.LocalTransactionTextAnalyzer
@@ -41,6 +42,11 @@ class AssistantTransactionEmulatorTest {
             assertTrue(writer(AddTransactionInput(requireNotNull(draft.transaction()))).getOrThrow())
             val docs=FirebaseFirestore.getInstance().collection("users").document(uid).collection("transactions").get().await().documents
             assertEquals(1,docs.count { it.id==draft.id })
+            val mapping=FinancialMappingRepositoryImpl()
+            assertTrue(mapping.save(uid,BudgetRule.JARS,mapOf("Ăn uống" to "necessities")).getOrThrow())
+            assertTrue(mapping.save(uid,BudgetRule.FIFTY_THIRTY_TWENTY,mapOf("Ăn uống" to "needs")).getOrThrow())
+            assertEquals("necessities",mapping.load(uid,BudgetRule.JARS).getOrThrow()["Ăn uống"])
+            assertEquals("needs",mapping.load(uid,BudgetRule.FIFTY_THIRTY_TWENTY).getOrThrow()["Ăn uống"])
             withContext(Dispatchers.Main) { presenter.setUserId(null); session.setUserId(null) }
             assertNull(presenter.state.value.draft); assertTrue(session.transactions.value.isEmpty())
         } finally { withContext(Dispatchers.Main) { presenter.close(); session.close() }; scope.cancel() }
