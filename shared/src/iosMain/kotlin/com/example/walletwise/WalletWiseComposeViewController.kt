@@ -27,6 +27,9 @@ import com.example.walletwise.presentation.auth.ui.LoginScreenContent
 import com.example.walletwise.presentation.auth.ui.RegisterScreenContent
 import platform.UIKit.UIViewController
 import com.example.walletwise.domain.repository.CallbackTransactionService
+import com.example.walletwise.domain.repository.CallbackTransactionWriteService
+import com.example.walletwise.domain.repository.CallbackCategoryService
+import com.example.walletwise.data.repository.CallbackCategoryRepository
 import com.example.walletwise.data.repository.CallbackTransactionRepository
 import com.example.walletwise.presentation.transaction.*
 import kotlinx.coroutines.*
@@ -35,16 +38,20 @@ fun walletWiseComposeViewController(
     service: CallbackAuthService?,
     observer: AuthControllerObserver? = null,
     transactionService: CallbackTransactionService? = null,
-    homeObserver: TransactionHomeObserver? = null
+    homeObserver: TransactionHomeObserver? = null,
+    transactionWriter: CallbackTransactionWriteService? = null,
+    categoryService: CallbackCategoryService? = null
 ): UIViewController {
     val session = AuthControllerSession(service)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val home = TransactionHomeSession(scope, session.presenter, CallbackTransactionRepository(transactionService), IosTransactionDateTimeProvider())
+    val home = TransactionHomeSession(scope, session.presenter, CallbackTransactionRepository(transactionService, transactionWriter), IosTransactionDateTimeProvider(), CallbackCategoryRepository(categoryService))
     fun dispose() { home.dispose(); session.dispose(); scope.cancel() }
     val controller = ComposeUIViewController {
         DisposableEffect(session) { onDispose { dispose() } }
-        MaterialTheme {
-            WalletWiseAuthContent(session.presenter, home)
+        MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) androidx.compose.material3.darkColorScheme() else androidx.compose.material3.lightColorScheme()) {
+            androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
+                WalletWiseAuthContent(session.presenter, home)
+            }
         }
     }
     observer?.created(session)

@@ -12,5 +12,7 @@ data class Transaction(
     val note: String = "",
     val timestamp: Long = currentEpochMilliseconds(),
     val imageUrl: String = "", // Đường dẫn ảnh local hoặc Firebase Storage
-    val categoryId: String = "" // Optional stable reference; legacy records still use category name.
+    val categoryId: String = "", // Optional stable reference; legacy records still use category name.
+    /** Observation provenance only; never written to Firestore. Legacy iOS records remain read-only. */
+    val isLegacy: Boolean = false
 )

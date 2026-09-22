@@ -9,6 +9,10 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun TransactionHomeContent(state: TransactionHomeState, session: TransactionHomeSession, logoutError: String? = null) {
+    if (state.editor.visible) {
+        TransactionEditorContent(state.editor, session.editor, session.dateTimeProvider)
+        return
+    }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("WalletWise", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -16,6 +20,7 @@ fun TransactionHomeContent(state: TransactionHomeState, session: TransactionHome
         }
         Text("Xin chào, ${state.displayLabel}", style = MaterialTheme.typography.titleMedium)
         logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.editor.success?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Summary("Tổng Thu", state.totalIncome, "Thu", Modifier.weight(1f))
@@ -26,16 +31,20 @@ fun TransactionHomeContent(state: TransactionHomeState, session: TransactionHome
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Giao dịch", style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = session::openAdd, enabled = !state.editor.saving) { Text("+ Thêm") }
             TextButton(onClick = session::retry) { Text("Làm mới") }
         }
         TransactionListContent(
             state = state.list, onRetry = session::retry, onRowSelected = session::select,
-            onEdit = {}, onDelete = {}, modifier = Modifier.weight(1f),
+            onEdit = session::edit, onDelete = {}, modifier = Modifier.weight(1f),
             imageContent = { _, modifier -> NoTransactionImage(modifier) },
-            readOnly = true, selectedTransactionId = state.selectedTransactionId,
-            onDetailDismissed = session::dismissDetail
+            externalSelection = true, selectedTransactionId = state.selectedTransactionId,
+            onDetailDismissed = session::dismissDetail, emptyImageLabel = "No image",
+            canModify = { it in state.writableTransactionIds }, onDeleteRequested = session::requestDelete,
+            readOnlyReason = "Giao dịch cũ chỉ được xem. Chưa hỗ trợ sửa hoặc xóa.", actionsEnabled = !state.editor.saving
         )
     }
+    TransactionDeleteConfirmation(state.editor, session.editor)
 }
 
 @Composable

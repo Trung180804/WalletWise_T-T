@@ -18,6 +18,9 @@ private struct ComposeAuthView: UIViewControllerRepresentable {
         func createdHome(session: TransactionHomeSession) {
             home = session
             #if DEBUG
+            if let phase = ProcessInfo.processInfo.environment["WALLETWISE_TRANSACTION_WRITE_TEST_PHASE"], let auth = self.session, let adapter = transactions as? FirebaseTransactionAdapter {
+                DispatchQueue.main.async { TransactionMutationEmulatorProbe.run(phase: phase, auth: auth.presenter, home: session, adapter: adapter) }
+            }
             if let phase = ProcessInfo.processInfo.environment["WALLETWISE_TRANSACTION_TEST_PHASE"], let auth = self.session, let adapter = transactions as? FirebaseTransactionAdapter {
                 DispatchQueue.main.async { TransactionEmulatorIntegrationProbe.run(phase: phase, auth: auth.presenter, home: session, adapter: adapter) }
             }
@@ -50,7 +53,9 @@ private struct ComposeAuthView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         WalletWiseComposeViewControllerKt.walletWiseComposeViewController(
             service: AuthBootstrap.service, observer: context.coordinator,
-            transactionService: context.coordinator.transactions, homeObserver: context.coordinator
+            transactionService: context.coordinator.transactions, homeObserver: context.coordinator,
+            transactionWriter: context.coordinator.transactions as? CallbackTransactionWriteService,
+            categoryService: context.coordinator.transactions as? CallbackCategoryService
         )
     }
 

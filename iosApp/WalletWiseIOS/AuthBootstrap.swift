@@ -37,6 +37,9 @@ final class AuthBootstrap {
         let decision = AuthEmulatorPolicy.evaluate(environment)
         #if DEBUG
         if decision == .enabled {
+            // SDK warning logs can include a document path on rejected writes. Keep only error-level
+            // diagnostics; our own fixed-endpoint status audit never includes user/document data.
+            FirebaseConfiguration.shared.setLoggerLevel(.error)
             // Install the deny-by-default transport before Firebase can restore a saved user.
             AuthEmulatorTransport.install()
             // Public demo values, not credentials. The real Google plist is never modified.

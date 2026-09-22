@@ -14,13 +14,15 @@ data class TransactionDocument(
     val note: String,
     val timestampMilliseconds: Long,
     val legacyTimestamp: FirestoreTimestampValue?,
-    val imageUrl: String
+    val imageUrl: String,
+    val categoryId: String = ""
 ) {
     fun toTransaction(ownerUserId: String): Transaction = FirestoreWireMapper.transactionFromMap(
         documentId, ownerUserId, mapOf(
             "type" to type, "amount" to amount, "category" to category,
             "paymentMethod" to paymentMethod, "note" to note,
-            "timestamp" to (legacyTimestamp ?: timestampMilliseconds), "imageUrl" to imageUrl
+            "timestamp" to (legacyTimestamp ?: timestampMilliseconds), "imageUrl" to imageUrl,
+            "categoryId" to categoryId
         )
     )
 }

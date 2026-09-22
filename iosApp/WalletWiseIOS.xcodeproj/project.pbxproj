@@ -22,6 +22,8 @@
 		A1000000000000000000000D /* FirebaseTransactionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* FirebaseTransactionAdapter.swift */; };
 		A1000000000000000000000E /* TransactionEmulatorIntegrationProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* TransactionEmulatorIntegrationProbe.swift */; };
 /* End PBXBuildFile section */
+/* Checkpoint 5F Debug-only probe source (Release implementation compiled out). */
+		A1000000000000000000000F /* TransactionMutationEmulatorProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* TransactionMutationEmulatorProbe.swift */; };
 
 /* Begin PBXFileReference section */
 		A20000000000000000000001 /* WalletWiseIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletWiseIOSApp.swift; sourceTree = "<group>"; };
@@ -38,6 +40,7 @@
 		A2000000000000000000000C /* FirebaseTransactionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseTransactionAdapter.swift; sourceTree = "<group>"; };
 		A2000000000000000000000D /* TransactionEmulatorIntegrationProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionEmulatorIntegrationProbe.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+		A2000000000000000000000E /* TransactionMutationEmulatorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionMutationEmulatorProbe.swift; sourceTree = "<group>"; };
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
@@ -75,6 +78,7 @@
 				A2000000000000000000000B /* TransactionEmulatorPolicy.swift */,
 				A2000000000000000000000C /* FirebaseTransactionAdapter.swift */,
 				A2000000000000000000000D /* TransactionEmulatorIntegrationProbe.swift */,
+				A2000000000000000000000E /* TransactionMutationEmulatorProbe.swift */,
 				A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */,
 			);
 			path = WalletWiseIOS;
@@ -193,6 +197,7 @@
 				A1000000000000000000000C /* TransactionEmulatorPolicy.swift in Sources */,
 				A1000000000000000000000D /* FirebaseTransactionAdapter.swift in Sources */,
 				A1000000000000000000000E /* TransactionEmulatorIntegrationProbe.swift in Sources */,
+				A1000000000000000000000F /* TransactionMutationEmulatorProbe.swift in Sources */,
 				A1000000000000000000000B /* AuthEmulatorIntegrationProbe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
