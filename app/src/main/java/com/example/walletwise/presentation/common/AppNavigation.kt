@@ -76,6 +76,7 @@ fun AppNavigation(
         composable("home") {
             HomeScreen(
                 viewModel = transactionViewModel,
+                authViewModel = authViewModel,
                 user = userState,
                 onNavigateToAdd = { navController.navigate("add_transaction") },
                 onLogout = {

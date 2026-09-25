@@ -1,0 +1,336 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* WalletWiseIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* WalletWiseIOSApp.swift */; };
+		A10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* ContentView.swift */; };
+		A10000000000000000000003 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* AppDelegate.swift */; };
+		A10000000000000000000004 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* GoogleService-Info.plist */; };
+		A10000000000000000000005 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000001 /* FirebaseCore */; };
+		A10000000000000000000006 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000002 /* FirebaseAuth */; };
+		A10000000000000000000007 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B30000000000000000000003 /* FirebaseFirestore */; };
+		A10000000000000000000008 /* AuthEmulatorPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AuthEmulatorPolicy.swift */; };
+		A10000000000000000000009 /* AuthBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AuthBootstrap.swift */; };
+		A1000000000000000000000A /* FirebaseAuthAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* FirebaseAuthAdapter.swift */; };
+		A1000000000000000000000B /* AuthEmulatorIntegrationProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */; };
+		A1000000000000000000000C /* TransactionEmulatorPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* TransactionEmulatorPolicy.swift */; };
+		A1000000000000000000000D /* FirebaseTransactionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* FirebaseTransactionAdapter.swift */; };
+		A1000000000000000000000E /* TransactionEmulatorIntegrationProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* TransactionEmulatorIntegrationProbe.swift */; };
+/* End PBXBuildFile section */
+/* Checkpoint 5F Debug-only probe source (Release implementation compiled out). */
+		A1000000000000000000000F /* TransactionMutationEmulatorProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* TransactionMutationEmulatorProbe.swift */; };
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* WalletWiseIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletWiseIOSApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000004 /* WalletWiseIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WalletWiseIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000005 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		A20000000000000000000007 /* AuthEmulatorPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEmulatorPolicy.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* AuthBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthBootstrap.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* FirebaseAuthAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseAuthAdapter.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEmulatorIntegrationProbe.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* TransactionEmulatorPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionEmulatorPolicy.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* FirebaseTransactionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseTransactionAdapter.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* TransactionEmulatorIntegrationProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionEmulatorIntegrationProbe.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+		A2000000000000000000000E /* TransactionMutationEmulatorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionMutationEmulatorProbe.swift; sourceTree = "<group>"; };
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000005 /* FirebaseCore in Frameworks */,
+				A10000000000000000000006 /* FirebaseAuth in Frameworks */,
+				A10000000000000000000007 /* FirebaseFirestore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000002 /* WalletWiseIOS */,
+				A40000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A40000000000000000000002 /* WalletWiseIOS */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* WalletWiseIOSApp.swift */,
+				A20000000000000000000002 /* ContentView.swift */,
+				A20000000000000000000003 /* Info.plist */,
+				A20000000000000000000005 /* AppDelegate.swift */,
+				A20000000000000000000006 /* GoogleService-Info.plist */,
+				A20000000000000000000007 /* AuthEmulatorPolicy.swift */,
+				A20000000000000000000008 /* AuthBootstrap.swift */,
+				A20000000000000000000009 /* FirebaseAuthAdapter.swift */,
+				A2000000000000000000000B /* TransactionEmulatorPolicy.swift */,
+				A2000000000000000000000C /* FirebaseTransactionAdapter.swift */,
+				A2000000000000000000000D /* TransactionEmulatorIntegrationProbe.swift */,
+				A2000000000000000000000E /* TransactionMutationEmulatorProbe.swift */,
+				A2000000000000000000000A /* AuthEmulatorIntegrationProbe.swift */,
+			);
+			path = WalletWiseIOS;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000004 /* WalletWiseIOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* WalletWiseIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A90000000000000000000002 /* Build configuration list for PBXNativeTarget "WalletWiseIOS" */;
+			buildPhases = (
+				A60000000000000000000002 /* Compile Kotlin Framework */,
+				A70000000000000000000001 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A70000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WalletWiseIOS;
+			packageProductDependencies = (
+				B30000000000000000000001 /* FirebaseCore */,
+				B30000000000000000000002 /* FirebaseAuth */,
+				B30000000000000000000003 /* FirebaseFirestore */,
+			);
+			productName = WalletWiseIOS;
+			productReference = A20000000000000000000004 /* WalletWiseIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A60000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = A90000000000000000000001 /* Build configuration list for PBXProject "WalletWiseIOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A40000000000000000000001;
+			packageReferences = (
+				B20000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			productRefGroup = A40000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50000000000000000000001 /* WalletWiseIOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A70000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000004 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A60000000000000000000002 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\necho \"Skipping Gradle build because IDE supplied the Kotlin framework\"\nexit 0\nfi\n\ncd \"$SRCROOT/..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A70000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* WalletWiseIOSApp.swift in Sources */,
+				A10000000000000000000002 /* ContentView.swift in Sources */,
+				A10000000000000000000003 /* AppDelegate.swift in Sources */,
+				A10000000000000000000008 /* AuthEmulatorPolicy.swift in Sources */,
+				A10000000000000000000009 /* AuthBootstrap.swift in Sources */,
+				A1000000000000000000000A /* FirebaseAuthAdapter.swift in Sources */,
+				A1000000000000000000000C /* TransactionEmulatorPolicy.swift in Sources */,
+				A1000000000000000000000D /* FirebaseTransactionAdapter.swift in Sources */,
+				A1000000000000000000000E /* TransactionEmulatorIntegrationProbe.swift in Sources */,
+				A1000000000000000000000F /* TransactionMutationEmulatorProbe.swift in Sources */,
+				A1000000000000000000000B /* AuthEmulatorIntegrationProbe.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A80000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		A80000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		A80000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WalletWiseIOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+					"-framework",
+					WalletWiseShared,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.walletwise.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A80000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = WalletWiseIOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+					"-framework",
+					WalletWiseShared,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.walletwise.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A90000000000000000000001 /* Build configuration list for PBXProject "WalletWiseIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A80000000000000000000001 /* Debug */,
+				A80000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A90000000000000000000002 /* Build configuration list for PBXNativeTarget "WalletWiseIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A80000000000000000000003 /* Debug */,
+				A80000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B20000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = exactVersion;
+				version = 12.11.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B30000000000000000000001 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		B30000000000000000000002 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		B30000000000000000000003 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B20000000000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A60000000000000000000001 /* Project object */;
+}

@@ -157,7 +157,7 @@ fun DayCell(
     onClick: () -> Unit
 ) {
     // Lấy danh sách ảnh từ các giao dịch trong ngày
-    val images = transactions.mapNotNull { it.imageUrl }.filter { it.isNotEmpty() }
+    val images = transactions.map { it.imageUrl.trim() }.filter { it.isNotEmpty() }
 
     val todayBgColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
     Box(
@@ -170,7 +170,7 @@ fun DayCell(
         contentAlignment = Alignment.TopCenter // Đẩy nội dung lên trên cùng
     ) {
         // 1. KHU VỰC HIỂN THỊ ẢNH
-        if (images.isNotEmpty()) {
+        if (transactions.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -180,27 +180,23 @@ fun DayCell(
             ) {
                 // Ảnh nền (Nếu có từ 2 ảnh trở lên, tạo hiệu ứng xếp chồng)
                 if (images.size >= 2) {
-                    AsyncImage(
-                        model = images[1],
-                        contentDescription = null,
+                    TransactionPhoto(
+                        imageUrl = images[1],
                         modifier = Modifier
                             .fillMaxSize(0.85f) // Nhỏ hơn ảnh chính một chút
                             .offset(x = (-6).dp, y = (-6).dp) // Lệch về góc trái trên
                             .clip(RoundedCornerShape(12.dp))
                             .border(2.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
                     )
                 }
 
                 // Ảnh chính (Nằm trên cùng)
-                AsyncImage(
-                    model = images[0],
-                    contentDescription = null,
+                TransactionPhoto(
+                    imageUrl = images.firstOrNull(),
                     modifier = Modifier
                         .fillMaxSize(0.9f) // Chiếm 90% diện tích ô vuông
                         .clip(RoundedCornerShape(12.dp))
                         .border(2.dp, MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
                 )
 
                 // Badge đếm số lượng ảnh (+1, +2...)

@@ -11,6 +11,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.example.walletwise.BuildConfig
 import com.example.walletwise.MainActivity
 import com.example.walletwise.R
 
@@ -40,8 +41,15 @@ object NotificationHelper {
         // POST_NOTIFICATIONS is a runtime permission on Android 13+. A
         // background recurring task must not be allowed to crash the app when
         // the permission has not been granted yet.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        val permissionGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!AndroidSchedulingContract.shouldPostNotification(
+                sdkInt = Build.VERSION.SDK_INT,
+                notificationPermissionApi = Build.VERSION_CODES.TIRAMISU,
+                permissionGranted = permissionGranted
+            )
         ) {
             return
         }
@@ -68,8 +76,9 @@ object NotificationHelper {
         try {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(id, builder.build())
-        } catch (error: SecurityException) {
-            Log.w("NOTIFICATION", "Notification permission was not granted", error)
+            if (BuildConfig.DEBUG) Log.i("NOTIFICATION", "Posted notification")
+        } catch (_: SecurityException) {
+            Log.w("NOTIFICATION", "Notification permission was not granted")
         }
     }
 }

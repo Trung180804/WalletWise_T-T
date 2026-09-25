@@ -1,14 +1,29 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
 }
 
+val firebaseEmulatorRequested = providers.environmentVariable("USE_FIREBASE_EMULATOR")
+    .orElse(providers.gradleProperty("useFirebaseEmulator"))
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+
+val imgbbApiKey = providers.environmentVariable("IMGBB_API_KEY")
+    .orElse(providers.gradleProperty("imgbbApiKey"))
+    .orElse("")
+
+val supportUploadBaseUrl = providers.environmentVariable("SUPPORT_UPLOAD_BASE_URL")
+    .orElse(providers.gradleProperty("supportUploadBaseUrl"))
+    .orElse("")
+
+fun String.asBuildConfigString(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.example.walletwise"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
@@ -18,12 +33,34 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // Credentials stay outside source control. An empty value disables uploads safely.
+        buildConfigField("String", "IMGBB_API_KEY", imgbbApiKey.get().asBuildConfigString())
+        buildConfigField("String", "SUPPORT_UPLOAD_BASE_URL", supportUploadBaseUrl.get().asBuildConfigString())
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            buildConfigField(
+                "boolean",
+                "USE_FIREBASE_EMULATOR",
+                firebaseEmulatorRequested.get().toString()
+            )
+            val debugSupportUploadBaseUrl = supportUploadBaseUrl.get().ifBlank {
+                if (firebaseEmulatorRequested.get()) "http://10.0.2.2:3000" else ""
+            }
+            buildConfigField(
+                "String",
+                "SUPPORT_UPLOAD_BASE_URL",
+                debugSupportUploadBaseUrl.asBuildConfigString()
+            )
+        }
         release {
             isMinifyEnabled = false
+            // Release never contains an enabled emulator flag, even when the
+            // developer environment requests the checkpoint harness.
+            buildConfigField("boolean", "USE_FIREBASE_EMULATOR", "false")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -34,17 +71,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
-    }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -61,6 +98,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.compose.material:material-icons-extended:1.6.8")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

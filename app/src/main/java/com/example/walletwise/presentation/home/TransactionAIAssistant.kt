@@ -4,11 +4,8 @@ import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
 
-class TransactionAIAssistant {
-
-    private val apiKey = "AQ.Ab8RN6KhjAM-EsAbHv2c-BbkW0voqQyEUILMK_-fZp4OznNydw"
-
-    private val generativeModel = GenerativeModel(
+class TransactionAIAssistant(private val apiKey: String) {
+    private val generativeModel by lazy { GenerativeModel(
         modelName = "gemini-2.5-flash",
         apiKey = apiKey,
         generationConfig = generationConfig {
@@ -35,17 +32,26 @@ class TransactionAIAssistant {
         """.trimIndent()
             )
         }
-    )
+    ) }
 
     // Hàm nhận giọng nói (text) và trả về chuỗi JSON
-    suspend fun analyzeTransactionText(userInput: String): String? {
+    suspend fun analyzeTransactionText(userInput: String): AiAnalysisResult {
+        if (apiKey.isBlank()) return AiAnalysisResult.Failure(null, "NOT_CONFIGURED")
         return try {
             val response = generativeModel.generateContent(userInput)
-            response.text
-        } catch (e: Exception) {
-            android.util.Log.e("GeminiError", "Lỗi chi tiết từ Google: ${e.message}", e)
-            null
+            response.text?.let { AiAnalysisResult.Success(it) } ?: AiAnalysisResult.Failure(null, "EMPTY_RESPONSE")
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (e: Exception) {
+            val message = e.message.orEmpty()
+            val status = listOf(401, 403, 404, 429, 500, 503).firstOrNull { it.toString() in message }
+            AiAnalysisResult.Failure(status, when (status) {
+                401, 403 -> "AUTHENTICATION"; 429 -> "QUOTA"; 404 -> "MODEL_UNAVAILABLE"; else -> "NETWORK_OR_PROVIDER"
+            })
         }
     }
 }
 
+
+sealed interface AiAnalysisResult {
+    data class Success(val json: String) : AiAnalysisResult
+    data class Failure(val httpStatus: Int?, val reason: String) : AiAnalysisResult
+}
