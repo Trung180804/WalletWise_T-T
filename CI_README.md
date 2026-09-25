@@ -3,6 +3,7 @@
 ## Workflows Included
 1. **Android Build & Tests (Ubuntu):**
    - Runs `:shared:testAndroidHostTest`
+   - Runs `:app:testDebugUnitTest`
    - Compiles `:shared:compileAndroidMain`
    - Builds Debug APK (`:app:assembleDebug`)
    - Performs AGP Lint analysis (`:app:lintDebug`)

@@ -42,6 +42,9 @@ jobs:
       - name: Run Shared Host Tests
         run: ./gradlew :shared:testAndroidHostTest --rerun-tasks
 
+      - name: Run App Unit Tests
+        run: ./gradlew :app:testDebugUnitTest --rerun-tasks
+
       - name: Compile Android Main
         run: ./gradlew :shared:compileAndroidMain
 
