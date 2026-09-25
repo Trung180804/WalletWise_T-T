@@ -16,9 +16,21 @@ service cloud.firestore {
       allow read: if owns(uid);
       allow write: if owns(uid) && !staff() && !document.matches('runtime-failure_.*');
     }
-    match /users/{uid}/{collection}/{document=**} {
-      allow read: if owns(uid) && collection != 'transactions';
-      allow write: if owns(uid) && !staff() && collection != 'transactions';
+    match /users/{uid}/categories/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/reminders/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/recurring_transactions/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/budgets/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
     }
 
     match /supportConversations/{uid} {
@@ -30,6 +42,7 @@ service cloud.firestore {
           && d.status in ['open', 'waiting_staff', 'waiting_user', 'closed']
           && d.createdAt is timestamp && d.updatedAt == request.time
           && d.lastMessagePreview is string && d.lastMessagePreview.size() <= 160
+          && !d.lastMessagePreview.matches('.*(content://|file://|blob:|data:image).*')
           && d.lastSenderRole in ['user', 'staff'];
       }
       function customerWrite() {
@@ -54,17 +67,35 @@ service cloud.firestore {
         function validMessage() {
           let d = request.resource.data;
           return signedIn()
-            && d.keys().hasAll(['id', 'senderId', 'senderRole', 'content', 'createdAt', 'clientRequestId'])
-            && d.keys().hasOnly(['id', 'senderId', 'senderRole', 'content', 'createdAt', 'clientRequestId', 'status'])
+            && d.keys().hasAll(['id', 'senderId', 'senderRole', 'content', 'createdAt', 'clientRequestId', 'messageType'])
+            && d.keys().hasOnly(['id', 'senderId', 'senderRole', 'content', 'createdAt', 'clientRequestId',
+              'status', 'messageType', 'imageUrl', 'mimeType', 'fileName'])
             && d.id == messageId && d.clientRequestId == messageId && messageId.size() <= 128
             && d.senderId == request.auth.uid
             && d.content is string && d.content.size() <= 4000 && d.content.trim().size() > 0
-            && d.createdAt == request.time && d.get('status', 'sent') == 'sent';
+            && !d.content.matches('.*(content://|file://|blob:).*')
+            && d.createdAt == request.time && d.get('status', 'sent') == 'sent'
+            && (validTextMessage(d) || validImageMessage(d));
+        }
+        function validTextMessage(d) {
+          return d.messageType == 'text'
+            && !d.keys().hasAny(['imageUrl', 'mimeType', 'fileName']);
+        }
+        function validImageMessage(d) {
+          return d.messageType == 'image'
+            && d.keys().hasAll(['imageUrl', 'mimeType', 'fileName'])
+            && d.imageUrl is string
+            && d.imageUrl.matches('^/uploads/[A-Za-z0-9._-]{1,180}$')
+            && d.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+            && d.fileName is string && d.fileName.size() > 0 && d.fileName.size() <= 128
+            && !d.fileName.matches('.*[/\\\\].*');
         }
         function validParent(role, status) {
           let parent = getAfter(/databases/$(database)/documents/supportConversations/$(uid)).data;
           return parent.userId == uid && parent.lastSenderRole == role
-            && parent.status == status && parent.updatedAt == request.time;
+            && parent.status == status && parent.updatedAt == request.time
+            && (request.resource.data.messageType != 'image'
+              || parent.lastMessagePreview == '[Hình ảnh]');
         }
         allow read: if owns(uid) || staff();
         allow create: if validMessage()

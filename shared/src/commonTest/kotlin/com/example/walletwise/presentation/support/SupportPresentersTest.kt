@@ -64,6 +64,36 @@ class SupportPresentersTest {
         assertEquals(listOf(id, id), repo.requests.map { it.second.clientRequestId })
         assertEquals(1, p.state.value.messages.size); assertEquals(SupportDelivery.SENT, p.state.value.messages.single().delivery); p.close()
     }
+    @Test fun portableImageUsesStructuredFieldsAndNeverAcceptsLocalUri() = runTest {
+        val repo = Repository(); val p = chat(repo); runCurrent()
+        assertFalse(p.submitImage(SupportImagePayload("content://picker/private", "image/jpeg", "private.jpg")))
+        assertTrue(repo.requests.isEmpty())
+
+        p.input("  ảnh kiểm tra  ")
+        assertTrue(p.submitImage(SupportImagePayload("/uploads/mobile-check.jpg", "image/jpeg", "mobile-check.jpg")))
+        runCurrent()
+        val sent = repo.requests.single().second
+        assertEquals(SupportMessageType.IMAGE, sent.messageType)
+        assertEquals("/uploads/mobile-check.jpg", sent.imageUrl)
+        assertEquals("image/jpeg", sent.mimeType)
+        assertEquals("mobile-check.jpg", sent.fileName)
+        assertEquals("[image:/uploads/mobile-check.jpg]\nảnh kiểm tra", sent.content)
+        assertFalse(sent.content.contains("content://"))
+        p.close()
+    }
+    @Test fun imageRetryKeepsClientRequestIdAndDoesNotDuplicateUiMessage() = runTest {
+        val repo = Repository().apply { fail = true }
+        val p = chat(repo); runCurrent()
+        assertTrue(p.submitImage(SupportImagePayload("/uploads/retry.jpg", "image/jpeg", "retry.jpg")))
+        runCurrent()
+        val id = p.state.value.messages.single().id
+        assertEquals(SupportDelivery.FAILED, p.state.value.messages.single().delivery)
+        repo.fail = false
+        p.retry(id); p.retry(id); runCurrent()
+        assertEquals(listOf(id, id), repo.requests.map { it.second.clientRequestId })
+        assertEquals(1, p.state.value.messages.size)
+        p.close()
+    }
     @Test fun repeatedSnapshotsDeduplicateAndSortByServerTimeThenId() = runTest {
         val repo = Repository(); val p = chat(repo); runCurrent()
         val first = SupportMessage("a", "one", SupportSenderRole.USER, "first", 100)

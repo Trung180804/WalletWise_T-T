@@ -13,6 +13,10 @@ val imgbbApiKey = providers.environmentVariable("IMGBB_API_KEY")
     .orElse(providers.gradleProperty("imgbbApiKey"))
     .orElse("")
 
+val supportUploadBaseUrl = providers.environmentVariable("SUPPORT_UPLOAD_BASE_URL")
+    .orElse(providers.gradleProperty("supportUploadBaseUrl"))
+    .orElse("")
+
 fun String.asBuildConfigString(): String =
     "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -31,6 +35,7 @@ android {
 
         // Credentials stay outside source control. An empty value disables uploads safely.
         buildConfigField("String", "IMGBB_API_KEY", imgbbApiKey.get().asBuildConfigString())
+        buildConfigField("String", "SUPPORT_UPLOAD_BASE_URL", supportUploadBaseUrl.get().asBuildConfigString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -41,6 +46,14 @@ android {
                 "boolean",
                 "USE_FIREBASE_EMULATOR",
                 firebaseEmulatorRequested.get().toString()
+            )
+            val debugSupportUploadBaseUrl = supportUploadBaseUrl.get().ifBlank {
+                if (firebaseEmulatorRequested.get()) "http://10.0.2.2:3000" else ""
+            }
+            buildConfigField(
+                "String",
+                "SUPPORT_UPLOAD_BASE_URL",
+                debugSupportUploadBaseUrl.asBuildConfigString()
             )
         }
         release {
