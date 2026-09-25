@@ -39,6 +39,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import com.example.walletwise.data.support.SupportImageTransport
+import com.example.walletwise.data.support.supportImageModel
 import com.example.walletwise.domain.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -181,11 +184,38 @@ private fun SupportOption(title: String, description: String, icon: ImageVector,
 fun SupportChat(presenter: SupportChatPresenter) {
     val state by presenter.state.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val imageTransport = remember(context) { SupportImageTransport(context.applicationContext) }
 
-    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedImageUri by remember(state.userId) { mutableStateOf<Uri?>(null) }
+    var preparingImage by remember(state.userId) { mutableStateOf(false) }
+    var imageError by remember(state.userId) { mutableStateOf<String?>(null) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             selectedImageUri = uri
+            imageError = null
+        }
+    }
+    fun sendSelectedImage() {
+        val uri = selectedImageUri ?: return
+        val requestedUserId = state.userId ?: return
+        if (preparingImage || state.sending) return
+        preparingImage = true
+        imageError = null
+        scope.launch {
+            val result = imageTransport.prepare(uri)
+            result.fold(
+                onSuccess = { image ->
+                    if (presenter.state.value.userId == requestedUserId && presenter.submitImage(image)) {
+                        selectedImageUri = null
+                    }
+                },
+                onFailure = { error ->
+                    imageError = error.message ?: "Không thể xử lý hoặc tải ảnh. Vui lòng thử lại."
+                }
+            )
+            preparingImage = false
         }
     }
 
@@ -253,9 +283,9 @@ fun SupportChat(presenter: SupportChatPresenter) {
             }
             items(state.messages, key = { it.id }) { message ->
                 val isUser = message.senderRole == SupportSenderRole.USER
-                val imageUriString = remember(message.content) {
-                    val match = Regex("\\[image:(.*?)]").find(message.content)
-                    match?.groupValues?.get(1)
+                val imageUriString = remember(message.content, message.imageUrl) {
+                    message.imageUrl ?: Regex("\\[image:(.*?)]").find(message.content)
+                        ?.groupValues?.get(1)
                 }
                 val textOnly = remember(message.content) {
                     message.content.replace(Regex("\\[image:.*?]\n?"), "").trim()
@@ -268,16 +298,23 @@ fun SupportChat(presenter: SupportChatPresenter) {
                         modifier = Modifier.widthIn(max = 300.dp).testTag("support-message-${message.id}")
                     ) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (imageUriString != null) {
-                                AsyncImage(
-                                    model = imageUriString,
+                            if (message.messageType == SupportMessageType.IMAGE || imageUriString != null) {
+                                val imageModel = remember(imageUriString) { supportImageModel(imageUriString) }
+                                if (imageModel != null) {
+                                    SubcomposeAsyncImage(
+                                    model = imageModel,
                                     contentDescription = "Hình ảnh đính kèm",
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(max = 200.dp)
                                         .clip(RoundedCornerShape(12.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
+                                    contentScale = ContentScale.Fit,
+                                    loading = { CircularProgressIndicator(Modifier.size(28.dp)) },
+                                    error = { UnavailableSupportImage() }
+                                    )
+                                } else {
+                                    UnavailableSupportImage()
+                                }
                             }
                             if (textOnly.isNotEmpty()) {
                                 Text(textOnly, style = MaterialTheme.typography.bodyLarge)
@@ -324,7 +361,7 @@ fun SupportChat(presenter: SupportChatPresenter) {
                         contentScale = ContentScale.Crop
                     )
                     IconButton(
-                        onClick = { selectedImageUri = null },
+                        onClick = { selectedImageUri = null; imageError = null },
                         modifier = Modifier
                             .size(22.dp)
                             .align(Alignment.TopEnd)
@@ -339,6 +376,20 @@ fun SupportChat(presenter: SupportChatPresenter) {
                     }
                 }
             }
+            if (preparingImage) {
+                LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+            }
+        }
+        if (imageError != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(imageError!!, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = ::sendSelectedImage, enabled = !preparingImage && !state.sending) {
+                    Text("Thử lại")
+                }
+            }
         }
 
         Row(
@@ -350,7 +401,7 @@ fun SupportChat(presenter: SupportChatPresenter) {
         ) {
             IconButton(
                 onClick = { imagePicker.launch("image/*") },
-                enabled = state.userId != null,
+                enabled = state.userId != null && !preparingImage,
                 modifier = Modifier.size(48.dp)
             ) {
                 Icon(
@@ -370,25 +421,35 @@ fun SupportChat(presenter: SupportChatPresenter) {
                 enabled = state.userId != null
             )
 
-            val canSubmit = state.userId != null && !state.sending &&
+            val canSubmit = state.userId != null && !state.sending && !preparingImage &&
                 (state.input.trim().isNotEmpty() || selectedImageUri != null)
 
             FilledIconButton(
                 onClick = {
-                    val currentUri = selectedImageUri
-                    if (currentUri != null) {
-                        val text = state.input.trim()
-                        val combined = if (text.isEmpty()) "[image:$currentUri]" else "[image:$currentUri]\n$text"
-                        presenter.input(combined)
-                        selectedImageUri = null
-                    }
-                    presenter.submit()
+                    if (selectedImageUri != null) sendSelectedImage() else presenter.submit()
                 },
                 enabled = canSubmit,
                 modifier = Modifier.size(56.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, "Gửi tin nhắn")
             }
+        }
+    }
+}
+
+@Composable
+private fun UnavailableSupportImage() {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp).testTag("support-image-unavailable")
+    ) {
+        Box(Modifier.padding(16.dp), contentAlignment = Alignment.Center) {
+            Text(
+                "Ảnh không khả dụng",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

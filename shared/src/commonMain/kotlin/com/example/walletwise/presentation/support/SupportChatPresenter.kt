@@ -92,7 +92,42 @@ class SupportChatPresenter(
         if (!visible || mutable.value.sending) return
         if (content.isEmpty()) { mutable.value = mutable.value.copy(error = "Vui lòng nhập tin nhắn."); return }
         val message = SupportMessage(newId(), currentSession.userId, SupportSenderRole.USER, content,
-            delivery = SupportDelivery.PENDING, localCreatedAt = now())
+            delivery = SupportDelivery.PENDING, localCreatedAt = now(), messageType = SupportMessageType.TEXT)
+        enqueue(currentSession, message)
+    }
+
+    /** Receives only an already-uploaded, cross-device image reference from the Android boundary. */
+    fun submitImage(image: SupportImagePayload): Boolean {
+        val currentSession = session ?: return false
+        if (!visible || mutable.value.sending) return false
+        if (!image.isValid()) {
+            mutable.value = mutable.value.copy(error = "Ảnh chưa được tải lên an toàn. Vui lòng thử lại.")
+            return false
+        }
+        val caption = mutable.value.input.trim()
+        val marker = "[image:${image.imageUrl}]"
+        val content = if (caption.isEmpty()) marker else "$marker\n$caption"
+        if (content.length > SupportContact.MAX_MESSAGE) {
+            mutable.value = mutable.value.copy(error = "Tin nhắn kèm ảnh quá dài.")
+            return false
+        }
+        val message = SupportMessage(
+            id = newId(),
+            senderId = currentSession.userId,
+            senderRole = SupportSenderRole.USER,
+            content = content,
+            delivery = SupportDelivery.PENDING,
+            localCreatedAt = now(),
+            messageType = SupportMessageType.IMAGE,
+            imageUrl = image.imageUrl,
+            mimeType = image.mimeType,
+            fileName = image.fileName
+        )
+        enqueue(currentSession, message)
+        return true
+    }
+
+    private fun enqueue(currentSession: AuthSession, message: SupportMessage) {
         mutable.value = mutable.value.copy(messages = sorted(mutable.value.messages + message), input = "", sending = true, error = null)
         send(currentSession, message)
     }
