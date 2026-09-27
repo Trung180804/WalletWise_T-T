@@ -14,6 +14,8 @@ private struct ComposeAuthView: UIViewControllerRepresentable {
         private var session: AuthControllerSession?
         private var home: TransactionHomeSession?
         let transactions = AuthBootstrap.transactionService
+        let support = AuthBootstrap.supportService
+        let supportImages = SupportImagePickerAdapter()
 
         func createdHome(session: TransactionHomeSession) {
             home = session
@@ -51,12 +53,18 @@ private struct ComposeAuthView: UIViewControllerRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIViewController(context: Context) -> UIViewController {
-        WalletWiseComposeViewControllerKt.walletWiseComposeViewController(
+        let controller = WalletWiseComposeViewControllerKt.walletWiseComposeViewController(
             service: AuthBootstrap.service, observer: context.coordinator,
             transactionService: context.coordinator.transactions, homeObserver: context.coordinator,
             transactionWriter: context.coordinator.transactions as? CallbackTransactionWriteService,
-            categoryService: context.coordinator.transactions as? CallbackCategoryService
+            categoryService: context.coordinator.transactions as? CallbackCategoryService,
+            supportService: context.coordinator.support,
+            supportImagePicker: context.coordinator.supportImages,
+            supportImageBaseUrl: AuthBootstrap.supportImageBaseURL,
+            allowLocalSupportImages: AuthBootstrap.allowsLocalSupportImages
         )
+        context.coordinator.supportImages.hostViewController = controller
+        return controller
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}

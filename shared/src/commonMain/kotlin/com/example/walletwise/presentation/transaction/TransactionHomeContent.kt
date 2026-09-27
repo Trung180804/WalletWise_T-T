@@ -8,7 +8,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun TransactionHomeContent(state: TransactionHomeState, session: TransactionHomeSession, logoutError: String? = null) {
+fun TransactionHomeContent(
+    state: TransactionHomeState,
+    session: TransactionHomeSession,
+    logoutError: String? = null,
+    onOpenSupport: (() -> Unit)? = null
+) {
     if (state.editor.visible) {
         TransactionEditorContent(state.editor, session.editor, session.dateTimeProvider)
         return
@@ -16,7 +21,10 @@ fun TransactionHomeContent(state: TransactionHomeState, session: TransactionHome
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("WalletWise", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            TextButton(onClick = session::logout) { Text("Đăng xuất") }
+            Row {
+                if (onOpenSupport != null) TextButton(onClick = onOpenSupport) { Text("Hỗ trợ") }
+                TextButton(onClick = session::logout) { Text("Đăng xuất") }
+            }
         }
         Text("Xin chào, ${state.displayLabel}", style = MaterialTheme.typography.titleMedium)
         logoutError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
