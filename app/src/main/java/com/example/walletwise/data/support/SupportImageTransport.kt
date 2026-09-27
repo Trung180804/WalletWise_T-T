@@ -30,6 +30,21 @@ internal data class EncodedSupportImage(
     val fileName: String
 )
 
+internal interface SupportAuthTokenProvider {
+    suspend fun getAuthToken(forceRefresh: Boolean = false): String?
+}
+
+internal class FirebaseAuthTokenProvider : SupportAuthTokenProvider {
+    override suspend fun getAuthToken(forceRefresh: Boolean): String? {
+        val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return null
+        return try {
+            com.google.android.gms.tasks.Tasks.await(user.getIdToken(forceRefresh))?.token
+        } catch (_: Exception) {
+            null
+        }
+    }
+}
+
 internal class SupportImageEncoder {
     suspend fun encode(context: Context, uri: Uri): Result<EncodedSupportImage> =
         withContext(Dispatchers.IO) {
@@ -170,6 +185,7 @@ internal class SupportImageEncoder {
 
 internal class SupportImageUploader(
     private val baseUrl: String,
+    private val authTokenProvider: SupportAuthTokenProvider = FirebaseAuthTokenProvider(),
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -189,14 +205,34 @@ internal class SupportImageUploader(
                         image.bytes.toRequestBody(image.mimeType.toMediaType())
                     )
                     .build()
-                val request = Request.Builder()
+
+                var token = authTokenProvider.getAuthToken(forceRefresh = false)
+                val requestBuilder = Request.Builder()
                     .url("$origin/api/upload/image")
                     .post(body)
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    val responseBody = response.body?.string().orEmpty()
-                    require(response.isSuccessful) {
-                        "Tải ảnh thất bại (${response.code})."
+                if (!token.isNullOrEmpty()) {
+                    requestBuilder.header("Authorization", "Bearer $token")
+                }
+
+                var response = client.newCall(requestBuilder.build()).execute()
+
+                // If 401 Unauthorized, force refresh token and retry ONCE
+                if (response.code == 401) {
+                    response.close()
+                    token = authTokenProvider.getAuthToken(forceRefresh = true)
+                    val retryBuilder = Request.Builder()
+                        .url("$origin/api/upload/image")
+                        .post(body)
+                    if (!token.isNullOrEmpty()) {
+                        retryBuilder.header("Authorization", "Bearer $token")
+                    }
+                    response = client.newCall(retryBuilder.build()).execute()
+                }
+
+                response.use { res ->
+                    val responseBody = res.body?.string().orEmpty()
+                    require(res.isSuccessful) {
+                        "Tải ảnh thất bại (${res.code})."
                     }
                     val imageUrl = JSONObject(responseBody).optString("url").trim()
                     require(imageUrl.matches(Regex("^/uploads/[A-Za-z0-9._-]{1,180}$"))) {
