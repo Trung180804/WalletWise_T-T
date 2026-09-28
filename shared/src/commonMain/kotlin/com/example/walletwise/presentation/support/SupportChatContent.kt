@@ -150,9 +150,22 @@ fun SupportChatContent(
                     maxLines = 4,
                     enabled = state.userId != null
                 )
+                val image = pickerState.image
+                val canSubmit = state.userId != null && !state.sending && !pickerState.selecting &&
+                    (state.input.trim().isNotEmpty() || (image != null && image.uploadUrl.isNotBlank()))
+
                 FilledIconButton(
-                    onClick = presenter::submit,
-                    enabled = state.userId != null && !state.sending && state.input.trim().isNotEmpty(),
+                    onClick = {
+                        val image = pickerState.image
+                        if (image != null && image.uploadUrl.isNotBlank()) {
+                            if (presenter.submitImage(SupportImagePayload(image.uploadUrl, image.mimeType, image.fileName))) {
+                                images.clear()
+                            }
+                        } else {
+                            presenter.submit()
+                        }
+                    },
+                    enabled = canSubmit,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, "Gửi tin nhắn")

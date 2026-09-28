@@ -15,7 +15,7 @@ private struct ComposeAuthView: UIViewControllerRepresentable {
         private var home: TransactionHomeSession?
         let transactions = AuthBootstrap.transactionService
         let support = AuthBootstrap.supportService
-        let supportImages = SupportImagePickerAdapter()
+        let supportImages = SupportImagePickerAdapter(baseUrl: AuthBootstrap.supportImageBaseURL)
 
         func createdHome(session: TransactionHomeSession) {
             home = session

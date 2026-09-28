@@ -108,7 +108,7 @@ class SupportImageInteropTest {
             null
         )
         assertEquals(500_000, presenter.state.value.image?.byteCount)
-        assertContains(presenter.state.value.error.orEmpty(), "chưa khả dụng")
+        assertContains(presenter.state.value.error.orEmpty(), "Không thể kết nối")
         presenter.clear()
         assertNull(presenter.state.value.image)
     }

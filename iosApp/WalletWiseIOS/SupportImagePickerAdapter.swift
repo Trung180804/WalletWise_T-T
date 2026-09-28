@@ -3,6 +3,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
 import WalletWiseShared
+import FirebaseAuth
 
 private final class ImagePickerCancellation: NSObject, SupportCancellation {
     private(set) var active = true
@@ -21,10 +22,16 @@ private final class ImagePickerCancellation: NSObject, SupportCancellation {
 /** One-shot native picker and bounded encoder. It never persists or uploads image bytes. */
 final class SupportImagePickerAdapter: NSObject, CallbackSupportImagePicker, PHPickerViewControllerDelegate {
     weak var hostViewController: UIViewController?
+    private let baseUrl: String
     private weak var pickerViewController: PHPickerViewController?
     private var cancellation: ImagePickerCancellation?
     private var completion: SupportImagePickCompletion?
     private var selectionId: String?
+
+    init(baseUrl: String) {
+        self.baseUrl = baseUrl
+        super.init()
+    }
 
     func pick(selectionId: String, completion: SupportImagePickCompletion) -> SupportCancellation {
         precondition(Thread.isMainThread)
@@ -81,11 +88,76 @@ final class SupportImagePickerAdapter: NSObject, CallbackSupportImagePicker, PHP
             let result = autoreleasepool { Self.prepare(url: url, originalName: suggestedName, selectionId: requestedId) }
             DispatchQueue.main.async {
                 switch result {
-                case .success(let image): self.finish(image: image, failure: nil)
+                case .success(let payload): self.upload(image: payload.0, data: payload.1)
                 case .failure(let error): self.finish(image: nil, failure: error.failure)
                 }
             }
         }
+    }
+
+    private func upload(image: PreparedSupportImage, data: Data) {
+        let origin = baseUrl.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !origin.isEmpty, let url = URL(string: origin + "/api/upload/image") else {
+            self.finish(image: nil, failure: .unavailable)
+            return
+        }
+        guard let user = Auth.auth().currentUser else {
+            self.finish(image: nil, failure: .unavailable)
+            return
+        }
+        user.getIDTokenForcingRefresh(false) { [weak self] token, error in
+            guard let self = self, let token = token else {
+                DispatchQueue.main.async { self?.finish(image: nil, failure: .unavailable) }
+                return
+            }
+            self.executeUpload(url: url, token: token, data: data, image: image, retry: true)
+        }
+    }
+
+    private func executeUpload(url: URL, token: String, data: Data, image: PreparedSupportImage, retry: Bool) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"File\"; filename=\"\(image.fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(image.mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let task = URLSession.shared.uploadTask(with: request, from: body) { [weak self] responseData, response, error in
+            guard let self = self else { return }
+            if let http = response as? HTTPURLResponse, http.statusCode == 401, retry {
+                Auth.auth().currentUser?.getIDTokenForcingRefresh(true) { newToken, error in
+                    if let newToken = newToken {
+                        self.executeUpload(url: url, token: newToken, data: data, image: image, retry: false)
+                    } else {
+                        DispatchQueue.main.async { self.finish(image: nil, failure: .unavailable) }
+                    }
+                }
+                return
+            }
+            if let responseData = responseData, let http = response as? HTTPURLResponse, http.statusCode >= 200, http.statusCode < 300,
+               let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+               let uploadUrl = json["url"] as? String {
+                let finalImage = PreparedSupportImage(
+                    selectionId: image.selectionId,
+                    fileName: image.fileName,
+                    mimeType: image.mimeType,
+                    byteCount: image.byteCount,
+                    pixelWidth: image.pixelWidth,
+                    pixelHeight: image.pixelHeight,
+                    uploadUrl: uploadUrl
+                )
+                DispatchQueue.main.async { self.finish(image: finalImage, failure: nil) }
+            } else {
+                DispatchQueue.main.async { self.finish(image: nil, failure: .unavailable) }
+            }
+        }
+        task.resume()
     }
 
     private func finish(image: PreparedSupportImage?, failure: SupportImagePickFailure?) {
@@ -112,7 +184,7 @@ final class SupportImagePickerAdapter: NSObject, CallbackSupportImagePicker, PHP
         return controller
     }
 
-    private static func prepare(url: URL, originalName: String?, selectionId: String) -> Result<PreparedSupportImage, ImagePreparationError> {
+    private static func prepare(url: URL, originalName: String?, selectionId: String) -> Result<(PreparedSupportImage, Data), ImagePreparationError> {
         do {
             let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
             guard values.isRegularFile == true, let sourceSize = values.fileSize, sourceSize > 0 else {
@@ -151,14 +223,16 @@ final class SupportImagePickerAdapter: NSObject, CallbackSupportImagePicker, PHP
                 }
             }
             guard let encoded else { return .failure(.tooLarge) }
-            return .success(PreparedSupportImage(
+            let prepared = PreparedSupportImage(
                 selectionId: selectionId,
                 fileName: safeJpegName(originalName),
                 mimeType: "image/jpeg",
                 byteCount: Int64(encoded.count),
                 pixelWidth: Int32(normalized.size.width.rounded()),
-                pixelHeight: Int32(normalized.size.height.rounded())
-            ))
+                pixelHeight: Int32(normalized.size.height.rounded()),
+                uploadUrl: ""
+            )
+            return .success((prepared, encoded))
         } catch {
             return .failure(.invalid)
         }

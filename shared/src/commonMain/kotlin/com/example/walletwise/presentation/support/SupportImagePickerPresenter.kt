@@ -10,7 +10,8 @@ data class PreparedSupportImage(
     val mimeType: String,
     val byteCount: Long,
     val pixelWidth: Int,
-    val pixelHeight: Int
+    val pixelHeight: Int,
+    val uploadUrl: String = ""
 )
 
 enum class SupportImagePickFailure { CANCELLED, BUSY, UNAVAILABLE, INVALID_IMAGE, TOO_LARGE, UNKNOWN }
@@ -59,7 +60,7 @@ class SupportImagePickerPresenter(
                     failure == SupportImagePickFailure.CANCELLED -> SupportImagePickerState()
                     image != null && failure == null -> SupportImagePickerState(
                         image = image,
-                        error = "Chức năng tải ảnh lên chưa khả dụng trên iOS vì phiên đăng nhập chưa tương thích."
+                        error = if (image.uploadUrl.isBlank()) "Không thể kết nối máy chủ để tải ảnh lên." else null
                     )
                     else -> SupportImagePickerState(error = failure.message())
                 }
