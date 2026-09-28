@@ -26,10 +26,77 @@ data class SupportImagePayload(
     val fileName: String
 ) {
     fun isValid(): Boolean =
-        (imageUrl.matches(Regex("^/uploads/[A-Za-z0-9._-]{1,180}$")) || imageUrl.startsWith("https://")) &&
+        SupportImageUrlPolicy.isPortable(imageUrl) &&
             mimeType in setOf("image/jpeg", "image/png", "image/webp") &&
             fileName.isNotBlank() && fileName.length <= SupportContact.MAX_SUPPORT_IMAGE_FILE_NAME &&
             '/' !in fileName && '\\' !in fileName
+}
+
+/** Pure KMP policy. Platform URL loaders still perform their own URL parsing and transport checks. */
+object SupportImageUrlPolicy {
+    private val uploadPath = Regex("^/uploads/[A-Za-z0-9._-]{1,180}$")
+
+    fun isRelativeUploadPath(value: String?): Boolean {
+        val candidate = value ?: return false
+        if (candidate != candidate.trim() || !candidate.matches(uploadPath)) return false
+        val fileName = candidate.substringAfterLast('/')
+        return fileName != "." && fileName != ".." && fileName.any(Char::isLetterOrDigit)
+    }
+
+    fun isPortable(value: String?): Boolean {
+        val candidate = value.orEmpty()
+        if (candidate != candidate.trim()) return false
+        return isRelativeUploadPath(candidate) || isSafeHttps(candidate)
+    }
+
+    fun resolve(value: String?, baseUrl: String, allowLocalHttp: Boolean = false): String? {
+        val candidate = value.orEmpty()
+        if (candidate != candidate.trim()) return null
+        if (isSafeHttps(candidate)) return candidate
+        if (!isRelativeUploadPath(candidate)) return null
+        val origin = baseUrl.trim().trimEnd('/')
+        val validOrigin = isSafeHttps(origin) || (allowLocalHttp && isSafeHttpOrigin(origin))
+        return if (validOrigin) "$origin$candidate" else null
+    }
+
+    private fun isSafeHttps(value: String): Boolean {
+        if (!value.startsWith("https://") || value.length !in 9..2048 ||
+            value.any { it.isWhitespace() || it.code < 0x20 } || '\\' in value) return false
+        val remainder = value.removePrefix("https://")
+        val authority = remainder.substringBefore('/').substringBefore('?').substringBefore('#')
+        return isSafeAuthority(authority)
+    }
+
+    private fun isSafeHttpOrigin(value: String): Boolean {
+        if (!value.startsWith("http://") || value.length !in 8..256 ||
+            value.any { it.isWhitespace() || it.code < 0x20 } || '\\' in value) return false
+        val authority = value.removePrefix("http://")
+        return '/' !in authority && '?' !in authority && '#' !in authority && isSafeAuthority(authority)
+    }
+
+    private fun isSafeAuthority(authority: String): Boolean {
+        if (authority.isBlank() || '@' in authority || authority.startsWith('.') ||
+            authority.endsWith('.') || authority.endsWith(':')) return false
+        if (authority.count { it == ':' } > 1) return false
+        val host = authority.substringBefore(':')
+        val port = authority.substringAfter(':', "")
+        if (port.isNotEmpty() && (port.toIntOrNull() ?: 0) !in 1..65535) return false
+        return host.isNotBlank() && host.all { it.isLetterOrDigit() || it == '.' || it == '-' }
+    }
+}
+
+object SupportMessagePresentation {
+    private val legacyImage = Regex("\\[image:(.*?)]")
+
+    fun imageReference(message: SupportMessage): String? =
+        message.imageUrl?.trim()?.takeIf { it.isNotEmpty() }
+            ?: legacyImage.find(message.content)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
+
+    fun text(message: SupportMessage): String = message.content.replace(legacyImage, "").trim()
+
+    fun preview(message: SupportMessage): String =
+        if (message.messageType == SupportMessageType.IMAGE || imageReference(message) != null) "[Hình ảnh]"
+        else text(message).take(160)
 }
 
 data class SupportConversation(

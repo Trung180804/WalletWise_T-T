@@ -30,6 +30,30 @@ final class AuthBootstrap {
         #endif
     }
 
+    static var supportService: CallbackSupportService? {
+        #if DEBUG
+        guard let emulatorFirestore, let adapter else { return nil }
+        return FirebaseSupportAdapter(firestore: emulatorFirestore, auth: adapter)
+        #else
+        return nil
+        #endif
+    }
+
+    static var supportImageBaseURL: String {
+        (Bundle.main.object(forInfoDictionaryKey: "WalletWiseSupportImageBaseURL") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    static var allowsLocalSupportImages: Bool {
+        #if DEBUG
+        guard TransactionEmulatorPolicy.evaluate(ProcessInfo.processInfo.environment) == .enabled,
+              let url = URL(string: supportImageBaseURL) else { return false }
+        return url.scheme == "http" && url.host == "127.0.0.1" && url.user == nil && url.password == nil
+        #else
+        return false
+        #endif
+    }
+
     static func configure() {
         precondition(!configured, "Firebase bootstrap must run once per process")
         configured = true
