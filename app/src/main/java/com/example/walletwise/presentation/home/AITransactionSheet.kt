@@ -84,7 +84,6 @@ fun AITransactionSheet(viewModel: TransactionViewModel) {
             voiceLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             })
         } catch (_: ActivityNotFoundException) { voiceMessage = "Thiết bị chưa có nhận diện giọng nói. Hãy nhập chữ." }
     }
