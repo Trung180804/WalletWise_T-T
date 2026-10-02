@@ -1,0 +1,10 @@
+{
+  "name": "walletwise-support-chat-emulator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --require ./network-guard.cjs harness.mjs suite",
+    "staff": "node --require ./network-guard.cjs harness.mjs serve"
+  },
+  "dependencies": { "firebase": "12.19.0" }
+}

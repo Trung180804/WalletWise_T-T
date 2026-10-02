@@ -1,8 +1,18 @@
 package com.example.walletwise.presentation.home
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.asImageBitmap
+import com.example.walletwise.domain.service.MoneyInput
+import com.example.walletwise.presentation.transaction.GroupedMoneyTransformation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import coil.compose.AsyncImage
+import com.example.walletwise.data.image.TransactionAttachmentState
+import com.example.walletwise.presentation.transaction.transactionCategoryChoices
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -32,6 +42,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -39,41 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
-import com.google.firebase.firestore.PropertyName
 import java.io.File
-import java.util.UUID
+import com.example.walletwise.domain.model.Category
+import com.example.walletwise.domain.model.DefaultExpenseCategories
 
-data class CategoryItem(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String = "",
-    val icon: String = "",
-    val type: String = "Chi",
-    @get:PropertyName("isCustom") @field:PropertyName("isCustom")
-    val isCustom: Boolean = false,
-    val sortOrder: Int = 0
-)
-
-val expenseCategories = listOf(
-    CategoryItem(name = "Ăn uống", icon = "🍔", sortOrder = 1),
-    CategoryItem(name = "Mua sắm", icon = "🛒", sortOrder = 2),
-    CategoryItem(name = "Nhà cửa", icon = "🏠", sortOrder = 3),
-    CategoryItem(name = "Di chuyển", icon = "🚗", sortOrder = 4),
-    CategoryItem(name = "Y tế", icon = "💊", sortOrder = 5),
-    CategoryItem(name = "Giải trí", icon = "🎮", sortOrder = 6),
-    CategoryItem(name = "Hóa đơn", icon = "💳", sortOrder = 7),
-    CategoryItem(name = "Học tập", icon = "📚", sortOrder = 8)
-)
-
-val incomeCategories = listOf(
-    CategoryItem(name = "Lương", icon = "💰", type = "Thu", sortOrder = 1),
-    CategoryItem(name = "Thưởng", icon = "🎁", type = "Thu", sortOrder = 2),
-    CategoryItem(name = "Đầu tư", icon = "📈", type = "Thu", sortOrder = 3),
-    CategoryItem(name = "Kinh doanh", icon = "💼", type = "Thu", sortOrder = 4),
-    CategoryItem(name = "Part-time", icon = "🎯", type = "Thu", sortOrder = 5),
-    CategoryItem(name = "Giải thưởng", icon = "🏆", type = "Thu", sortOrder = 6),
-    CategoryItem(name = "Quà tặng", icon = "💝", type = "Thu", sortOrder = 7),
-    CategoryItem(name = "Khác", icon = "🔄", type = "Thu", sortOrder = 8)
-)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -81,54 +61,60 @@ fun AddTransactionScreen(
     viewModel: TransactionViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val session by viewModel.transactionSessionState.collectAsState()
+    val sessionUid = session.userId
     val txToEdit = viewModel.transactionToEdit
     val isEditMode = txToEdit != null
 
-    var type by remember { mutableStateOf(txToEdit?.type ?: "Chi") }
-    var amount by remember { mutableStateOf(if (isEditMode) txToEdit!!.amount.toLong().toString() else "") }
-    var note by remember { mutableStateOf(txToEdit?.note ?: "") }
-    var category by remember { mutableStateOf(txToEdit?.category ?: expenseCategories[0].name) }
-    var selectedWallet by remember { mutableStateOf(txToEdit?.paymentMethod ?: "Tiền mặt") }
+    var type by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(txToEdit?.type ?: "Chi") }
+    var amount by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(txToEdit?.amount?.toLong()?.toString().orEmpty()) }
+    var note by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(txToEdit?.note ?: "") }
+    var category by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(txToEdit?.category.orEmpty()) }
+    var selectedWallet by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(txToEdit?.paymentMethod ?: "Tiền mặt") }
 
     val mainColor = if (type == "Chi") Color(0xFFFA3B70) else Color(0xFF00C875)
     val categories by viewModel.categories.collectAsState()
-    val currentCategories = categories.filter { it.type == type }
-        .sortedWith(compareBy({ if (it.sortOrder == 0) Int.MAX_VALUE else it.sortOrder }, { it.name }))
+    val choices = transactionCategoryChoices(categories, type, category, txToEdit)
+    val currentCategories = choices.firstEight
+    LaunchedEffect(type, currentCategories) {
+        if (category.isBlank() && !isEditMode) category = currentCategories.firstOrNull()?.name.orEmpty()
+    }
 
     val isLoading by viewModel.isLoading.collectAsState()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current // 👉 Quản lý Focus để ẩn bàn phím
+    val moneyInput = com.example.walletwise.presentation.transaction.rememberMoneyInput(amount) { amount = it }
 
-    var tempImageUri by remember { mutableStateOf<Uri?>(null) }
-    var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
+    val attachmentDirectory = File(context.cacheDir, "walletwise_transaction_attachment")
+    val attachment = rememberSaveable(sessionUid, txToEdit?.id, saver = listSaver(
+        save = { state: TransactionAttachmentState -> state.snapshot() },
+        restore = { saved -> TransactionAttachmentState(attachmentDirectory).apply { restore(saved) } }
+    )) { TransactionAttachmentState(attachmentDirectory, txToEdit?.imageUrl.orEmpty()) }
+    DisposableEffect(attachment) { onDispose {
+        if ((context as? android.app.Activity)?.isChangingConfigurations != true) attachment.close()
+    } }
+    var stableDraftId by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+    val formUserId = sessionUid
+    var captureUserId by rememberSaveable(sessionUid) { mutableStateOf<String?>(null) }
+    val dateFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT) }
+    var dateInput by rememberSaveable(sessionUid, txToEdit?.id) { mutableStateOf(java.time.Instant.ofEpochMilli(txToEdit?.timestamp ?: System.currentTimeMillis()).atZone(java.time.ZoneId.systemDefault()).toLocalDate().format(dateFormatter)) }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success) { capturedImageUri = tempImageUri }
+        if (captureUserId != null && captureUserId == sessionUid) attachment.cameraResult(success) else attachment.close()
     }
-
-    LaunchedEffect(type, currentCategories) {
-        if (currentCategories.isNotEmpty() && currentCategories.none { it.name == category }) {
-            category = currentCategories[0].name
-        }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (captureUserId != null && captureUserId == sessionUid) attachment.pickerResult(uri)
     }
-
     val handleBack = {
         viewModel.transactionToEdit = null
+        attachment.close()
         onNavigateBack()
     }
-
+    BackHandler { handleBack() }
     fun launchCamera() {
-        try {
-            val file = File(context.cacheDir, "receipt_${System.currentTimeMillis()}.jpg")
-            if (file.exists()) file.delete()
-            file.createNewFile()
-            val uri = FileProvider.getUriForFile(context, "com.example.walletwise.fileprovider", file)
-            tempImageUri = uri
-            cameraLauncher.launch(uri)
-        } catch (e: Exception) {
-            android.widget.Toast.makeText(context, "LỖI CAMERA: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
-        }
+        captureUserId = sessionUid
+        try { cameraLauncher.launch(attachment.cameraUri(context)) }
+        catch (_: Exception) { attachment.launchFailed() }
     }
-
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -151,6 +137,7 @@ fun AddTransactionScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
+                .imePadding()
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -159,43 +146,31 @@ fun AddTransactionScreen(
             AnimatedSegmentedSlider(currentType = type, onTypeChange = { type = it })
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Khu vực Camera
-            Box(
-                modifier = Modifier
-                    .size(160.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp))
-                    .clickable { launchCamera() },
-                contentAlignment = Alignment.Center
-            ) {
-                val imageToShow = capturedImageUri ?: txToEdit?.imageUrl
-                if (imageToShow != null) {
-                    Image(
-                        painter = rememberAsyncImagePainter(imageToShow), contentDescription = "Hóa đơn",
-                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)), contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(color = Color.Gray.copy(alpha = 0.6f), shape = RoundedCornerShape(12.dp)) {
-                            Text("AI OCR", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("📷", fontSize = 40.sp)
-                    }
-                    Box(modifier = Modifier.align(Alignment.BottomCenter).offset(y = 16.dp).size(40.dp).background(MaterialTheme.colorScheme.surface, CircleShape).border(3.dp, Color(0xFF9C27B0), CircleShape))
-                }
+            Box(Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                if (attachment.previewModel != null) AsyncImage(attachment.previewModel, "Ảnh đính kèm giao dịch", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                else Text("Ảnh đính kèm giao dịch", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton({ launchCamera() }, enabled = !isLoading) { Text("Chụp ảnh") }
+                OutlinedButton({
+                    captureUserId = sessionUid
+                    try { galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    catch (_: Exception) { attachment.launchFailed() }
+                }, enabled = !isLoading) { Text("Thư viện") }
+            }
+            if (attachment.previewModel != null) TextButton(attachment::remove, enabled = !isLoading) { Text("Xóa ảnh") }
+            attachment.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Spacer(Modifier.height(16.dp))
             // Số tiền & Wallet
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text("Số tiền", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
-                        value = amount,
-                        onValueChange = { if (it.all { char -> char.isDigit() }) amount = it },
-                        modifier = Modifier.weight(1f),
+                        value = moneyInput.first,
+                        onValueChange = moneyInput.second,
+                        visualTransformation = GroupedMoneyTransformation,
+                        modifier = Modifier.weight(1f).testTag("transaction-amount"),
                         placeholder = { Text("0", color = Color.Gray) },
                         trailingIcon = { Text("đ", color = Color.Gray, modifier = Modifier.padding(end = 16.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -238,7 +213,7 @@ fun AddTransactionScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     maxItemsInEachRow = 4
                 ) {
-                    currentCategories.take(8).forEach { cat ->
+                    currentCategories.forEach { cat ->
                         CategoryCard(
                             item = cat,
                             isSelected = category == cat.name,
@@ -250,6 +225,9 @@ fun AddTransactionScreen(
                             }
                         )
                     }
+                }
+                choices.currentOutside?.let { current ->
+                    FilterChip(selected = true, onClick = {}, label = { Text("Đang chọn: ${current.name}") })
                 }
             }
 
@@ -271,31 +249,43 @@ fun AddTransactionScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            OutlinedTextField(dateInput, { dateInput = it }, label = { Text("Ngày dd/MM/yyyy") }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
             // Nút Lưu
             Button(
                 enabled = !isLoading,
                 onClick = {
                     focusManager.clearFocus()
-                    val amountValue = amount.toDoubleOrNull()
+                    val amountValue = MoneyInput.amount(amount)?.toDouble()
                     if (amountValue == null || amountValue <= 0) {
                         android.widget.Toast.makeText(context, "Số tiền không hợp lệ", android.widget.Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    if (category.isBlank()) {
+                    if (categories.none { it.type == type && it.name == category } && choices.currentOutside == null) {
                         android.widget.Toast.makeText(context, "Vui lòng chọn danh mục", android.widget.Toast.LENGTH_SHORT).show()
                         return@Button
                     }
+                    val transactionDate = try { com.example.walletwise.data.draft.FormTransactionTime.resolve(
+                        java.time.LocalDate.parse(dateInput,dateFormatter),txToEdit?.timestamp,null,
+                        System.currentTimeMillis(),java.time.ZoneId.systemDefault()) } catch (_: java.time.DateTimeException) { null }
+                    if (transactionDate == null || selectedWallet.isBlank()) {
+                        android.widget.Toast.makeText(context, "Vui lòng chọn ngày và phương thức thanh toán", android.widget.Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
                     if (isEditMode) {
-                        viewModel.updateTransaction(txToEdit!!.copy(amount = amountValue, type = type, category = category, note = note, paymentMethod = selectedWallet), capturedImageUri, context) { handleBack() }
+                        val categoryId = categories.firstOrNull { it.type == type && it.name == category }?.id
+                            ?: txToEdit?.takeIf { it.type == type && it.category == category }?.categoryId.orEmpty()
+                        viewModel.updateTransaction(requireNotNull(txToEdit).copy(amount = amountValue, type = type, category = category, categoryId = categoryId,
+                            note = note, paymentMethod = selectedWallet, timestamp = transactionDate, imageUrl = attachment.existingUrl), attachment.selectedUri, context) { handleBack() }
                     } else {
-                        viewModel.addTransaction(amountValue, type, category, note, selectedWallet, capturedImageUri, context) { handleBack() }
+                        viewModel.addTransaction(amountValue, type, category, note, selectedWallet, attachment.selectedUri, context, draftId = stableDraftId, transactionTimestamp = transactionDate, expectedUserId = formUserId) { handleBack() }
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(55.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = mainColor),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(if (isEditMode) "Cập nhật giao dịch" else if (type == "Chi") "Lưu chi tiêu" else "Lưu thu nhập", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(if (isEditMode) "Cập nhật giao dịch" else "Xác nhận lưu", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -325,7 +315,7 @@ fun AnimatedSegmentedSlider(currentType: String, onTypeChange: (String) -> Unit)
 
 // 👉 Đã thêm modifier truyền từ ngoài vào để fix cứng width
 @Composable
-fun CategoryCard(item: CategoryItem, isSelected: Boolean, activeColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun CategoryCard(item: Category, isSelected: Boolean, activeColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val unselectedBgColor = MaterialTheme.colorScheme.surfaceVariant
     val selectedBgColor = activeColor.copy(alpha = 0.15f)
 

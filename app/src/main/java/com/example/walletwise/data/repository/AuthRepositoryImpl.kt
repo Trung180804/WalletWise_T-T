@@ -1,58 +1,111 @@
 package com.example.walletwise.data.repository
 
+import com.example.walletwise.domain.model.AuthSession
+import com.example.walletwise.domain.model.ChangePasswordInput
+import com.example.walletwise.domain.model.LoginInput
+import com.example.walletwise.domain.model.RegisterInput
+import com.example.walletwise.domain.model.ResetPasswordInput
+import com.example.walletwise.domain.model.defaultUser
 import com.example.walletwise.domain.repository.AuthRepository
+import com.example.walletwise.domain.repository.UserRepository
+import com.example.walletwise.domain.result.RepositoryError
+import com.example.walletwise.domain.result.RepositoryErrorCode
+import com.example.walletwise.domain.result.RepositoryResult
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.firestore.FirebaseFirestore
 
-class AuthRepositoryImpl : AuthRepository {
-    // Khởi tạo Firebase Auth
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+class AuthRepositoryImpl(
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
+    private val userRepository: UserRepository = UserRepositoryImpl()
+) : AuthRepository {
+    override val currentSession: AuthSession?
+        get() = auth.currentUser?.toSession()
 
-    override fun isUserLoggedIn(): Boolean {
-        // Nếu có currentUser nghĩa là đã đăng nhập vĩnh viễn (Token còn hạn)
-        return auth.currentUser != null
+    override fun observeAuthState(): Flow<AuthSession?> = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            trySend(firebaseAuth.currentUser?.toSession())
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose { auth.removeAuthStateListener(listener) }
     }
 
-    override suspend fun register(email: String, pass: String, username: String): Result<Boolean> {
-        return try {
-            val result = auth.createUserWithEmailAndPassword(email, pass).await()
-            // Lệnh .await() giúp code đứng đợi Firebase trả kết quả về
-            val uid = result.user?.uid ?: throw Exception("Không lấy được UID")
-
-            val userMap = mapOf(
-                "id" to uid,
-                "email" to email,
-                "username" to username,
-                "currentStreak" to 0,
-                "lastRecordDate" to ""
+    override suspend fun register(input: RegisterInput): RepositoryResult<AuthSession> = try {
+        val result = auth.createUserWithEmailAndPassword(input.email, input.password).await()
+        val session = result.user?.toSession()
+            ?: return RepositoryResult.Failure(
+                RepositoryError(RepositoryErrorCode.UNKNOWN, "Không lấy được UID")
             )
-            FirebaseFirestore.getInstance().collection("users").document(uid).set(userMap).await()
-            Result.success(result.user != null)
-        } catch (e: Exception) {
-            Result.failure(e)
+        val registeredSession = session.copy(displayName = input.username)
+        when (val profile = userRepository.createUserIfMissing(registeredSession.defaultUser())) {
+            is RepositoryResult.Success -> RepositoryResult.Success(registeredSession)
+            is RepositoryResult.Failure -> profile
         }
+    } catch (error: Exception) {
+        RepositoryResult.Failure(error.toRepositoryError("Đăng ký thất bại!"))
     }
 
-    override suspend fun login(email: String, pass: String): Result<Boolean> {
+    override suspend fun login(input: LoginInput): RepositoryResult<AuthSession> = try {
+        val result = auth.signInWithEmailAndPassword(input.email, input.password).await()
+        val session = result.user?.toSession()
+            ?: return RepositoryResult.Failure(
+                RepositoryError(RepositoryErrorCode.INVALID_CREDENTIALS, "Đăng nhập thất bại!")
+            )
+        RepositoryResult.Success(session)
+    } catch (error: Exception) {
+        RepositoryResult.Failure(error.toRepositoryError("Đăng nhập thất bại!"))
+    }
+
+    override suspend fun resetPassword(input: ResetPasswordInput): RepositoryResult<Unit> = try {
+        auth.sendPasswordResetEmail(input.email).await()
+        RepositoryResult.Success(Unit)
+    } catch (error: Exception) {
+        RepositoryResult.Failure(error.toRepositoryError("Không thể gửi email khôi phục"))
+    }
+
+    override suspend fun changePassword(input: ChangePasswordInput): RepositoryResult<Unit> {
+        val user = auth.currentUser
+            ?: return RepositoryResult.Failure(
+                RepositoryError(RepositoryErrorCode.NOT_AUTHENTICATED, "Chưa đăng nhập")
+            )
+        val email = user.email
+            ?: return RepositoryResult.Failure(
+                RepositoryError(RepositoryErrorCode.NOT_AUTHENTICATED, "Chưa đăng nhập")
+            )
+
+        try {
+            user.reauthenticate(EmailAuthProvider.getCredential(email, input.currentPassword)).await()
+        } catch (_: Exception) {
+            return RepositoryResult.Failure(
+                RepositoryError(
+                    RepositoryErrorCode.INVALID_CREDENTIALS,
+                    "Mật khẩu hiện tại không chính xác!"
+                )
+            )
+        }
+
         return try {
-            val result = auth.signInWithEmailAndPassword(email, pass).await()
-            Result.success(result.user != null)
-        } catch (e: Exception) {
-            Result.failure(e)
+            user.updatePassword(input.newPassword).await()
+            RepositoryResult.Success(Unit)
+        } catch (error: Exception) {
+            RepositoryResult.Failure(error.toRepositoryError("Không thể đổi mật khẩu!"))
         }
     }
 
-    override suspend fun resetPassword(email: String): Result<Boolean> {
-        return try {
-            auth.sendPasswordResetEmail(email).await()
-            Result.success(true)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override fun logout() {
+    override fun logout(): RepositoryResult<Unit> = try {
         auth.signOut()
+        RepositoryResult.Success(Unit)
+    } catch (error: Exception) {
+        RepositoryResult.Failure(error.toRepositoryError("Đăng xuất thất bại!"))
     }
+
+    private fun FirebaseUser.toSession(): AuthSession = AuthSession(
+        userId = uid,
+        email = email.orEmpty(),
+        displayName = displayName.orEmpty()
+    )
 }

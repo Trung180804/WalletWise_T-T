@@ -1,0 +1,111 @@
+rules_version = '2';
+
+// Isolated Emulator configuration only. Never deploy.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function owns(uid) { return signedIn() && request.auth.uid == uid; }
+    function staff() { return signedIn() && request.auth.token.get('supportAgent', false) == true; }
+
+    // Mobile Auth/profile fixtures retain their customer-only access.
+    match /users/{uid} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/transactions/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff() && !document.matches('runtime-failure_.*');
+    }
+    match /users/{uid}/categories/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/reminders/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/recurring_transactions/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+    match /users/{uid}/budgets/{document} {
+      allow read: if owns(uid);
+      allow write: if owns(uid) && !staff();
+    }
+
+    match /supportConversations/{uid} {
+      function validConversation() {
+        let d = request.resource.data;
+        return d.keys().hasAll(['userId', 'userEmail', 'status', 'createdAt', 'updatedAt', 'lastMessagePreview', 'lastSenderRole'])
+          && d.keys().hasOnly(['userId', 'userEmail', 'status', 'createdAt', 'updatedAt', 'lastMessagePreview', 'lastSenderRole'])
+          && d.userId == uid && d.userEmail is string && d.userEmail.size() <= 254
+          && d.status in ['open', 'waiting_staff', 'waiting_user', 'closed']
+          && d.createdAt is timestamp && d.updatedAt == request.time
+          && d.lastMessagePreview is string && d.lastMessagePreview.size() <= 160
+          && !d.lastMessagePreview.matches('.*(content://|file://|blob:|data:image).*')
+          && d.lastSenderRole in ['user', 'staff'];
+      }
+      function customerWrite() {
+        return owns(uid) && !staff() && validConversation()
+          && request.resource.data.status == 'waiting_staff'
+          && request.resource.data.lastSenderRole == 'user'
+          && request.resource.data.userEmail == request.auth.token.get('email', '');
+      }
+      allow get: if owns(uid) || staff();
+      allow list: if staff();
+      allow create: if customerWrite() && request.resource.data.createdAt == request.time;
+      allow update: if validConversation()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && ((customerWrite() && resource.data.status != 'closed')
+          || (staff() && request.resource.data.userEmail == resource.data.userEmail
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'updatedAt', 'lastMessagePreview', 'lastSenderRole'])));
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function validMessage() {
+          let d = request.resource.data;
+          return signedIn()
+            && d.keys().hasAll(['id', 'senderId', 'senderRole', 'content', 'createdAt', 'clientRequestId', 'messageType'])
+            && d.keys().hasOnly(['id', 'senderId', 'senderRole', 'content', 'createdAt', 'clientRequestId',
+              'status', 'messageType', 'imageUrl', 'mimeType', 'fileName'])
+            && d.id == messageId && d.clientRequestId == messageId && messageId.size() <= 128
+            && d.senderId == request.auth.uid
+            && d.content is string && d.content.size() <= 4000 && d.content.trim().size() > 0
+            && !d.content.matches('.*(content://|file://|blob:).*')
+            && d.createdAt == request.time && d.get('status', 'sent') == 'sent'
+            && (validTextMessage(d) || validImageMessage(d));
+        }
+        function validTextMessage(d) {
+          return d.messageType == 'text'
+            && !d.keys().hasAny(['imageUrl', 'mimeType', 'fileName']);
+        }
+        function validImageMessage(d) {
+          return d.messageType == 'image'
+            && d.keys().hasAll(['imageUrl', 'mimeType', 'fileName'])
+            && d.imageUrl is string
+            && d.imageUrl.matches('^/uploads/[A-Za-z0-9._-]{1,180}$')
+            && d.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+            && d.fileName is string && d.fileName.size() > 0 && d.fileName.size() <= 128
+            && !d.fileName.matches('.*[/\\\\].*');
+        }
+        function validParent(role, status) {
+          let parent = getAfter(/databases/$(database)/documents/supportConversations/$(uid)).data;
+          return parent.userId == uid && parent.lastSenderRole == role
+            && parent.status == status && parent.updatedAt == request.time
+            && (request.resource.data.messageType != 'image'
+              || parent.lastMessagePreview == '[Hình ảnh]');
+        }
+        allow read: if owns(uid) || staff();
+        allow create: if validMessage()
+          && ((owns(uid) && !staff() && request.resource.data.senderRole == 'user'
+              && validParent('user', 'waiting_staff'))
+            || (staff() && request.resource.data.senderRole == 'staff'
+              && validParent('staff', 'waiting_user')));
+        // Stable clientRequestId == document ID: retries read, never rewrite.
+        allow update, delete: if false;
+      }
+    }
+  }
+}

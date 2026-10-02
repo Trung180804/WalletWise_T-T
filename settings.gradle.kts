@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "WalletWise"
 include(":app")
- 
+include(":shared")

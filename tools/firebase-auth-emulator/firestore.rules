@@ -1,0 +1,33 @@
+rules_version = '2';
+// Local demo emulator only. Never deploy. REST fixtures use the emulator owner sentinel.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/transactions/{transactionId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      function owner() { return request.auth != null && request.auth.uid == uid; }
+      function valid() {
+        return request.resource.data.get('id', transactionId) == transactionId
+          && request.resource.data.userId == uid
+          && request.resource.data.type in ['Thu', 'Chi']
+          && request.resource.data.amount is number && request.resource.data.amount > 0
+          && request.resource.data.timestamp is number && request.resource.data.timestamp > 0
+          && request.resource.data.category is string && request.resource.data.category.size() > 0
+          && request.resource.data.paymentMethod is string && request.resource.data.paymentMethod.size() > 0;
+      }
+      allow create: if owner() && valid() && request.resource.data.imageUrl == '';
+      allow update: if owner() && valid()
+        && request.resource.data.get('id', transactionId) == resource.data.get('id', transactionId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.get('imageUrl', '') == resource.data.get('imageUrl', '');
+      allow delete: if owner();
+    }
+    match /users/{uid}/categories/{categoryId} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /TRANSACTIONS/{transactionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+  }
+}
