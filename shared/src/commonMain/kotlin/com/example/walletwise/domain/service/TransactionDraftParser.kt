@@ -31,26 +31,59 @@ class TransactionDraftParser(private val clock: DraftDateTimeProvider) {
             val factor = if (decimal == null) multiplier else multiplier / if (decimal.groupValues[1].length == 1) 10 else 100
             if (base > MoneyInput.MAX_EXACT_AMOUNT / factor) null else base * factor
         }.toList()
-        val income = listOf("nhan luong", "nhan thuong", "thu nhap", "duoc tra luong").any { it in normalized }
-        val expense = listOf("mua", "chi ", "het ", "tra tien", "do xang", "an sang", "an trua", "an toi").any { it in normalized }
-        val type = when { income && expense -> null; income -> "Thu"; expense -> "Chi"; else -> null }
-        val suggested = when {
-            income && "luong" in normalized -> "Lương"
-            income && "thuong" in normalized -> "Thưởng"
-            listOf("do an", "an sang", "an trua", "an toi", "ca phe", "pho", "com ").any { it in normalized } -> "Ăn uống"
-            "xang" in normalized || "taxi" in normalized -> "Di chuyển"
-            "hoa don" in normalized -> "Hóa đơn"
+
+        val incomePhrases = listOf(
+            "duoc thuong", "thuong tet", "nhan thuong", "nhan luong", "duoc tra luong",
+            "thu nhap", "duoc cho", "duoc tang", "hoan tien", "ban duoc", "tien thuong", "me cho"
+        )
+        val expensePhrases = listOf(
+            "mua ", "mua", "chi ", "het ", "tra tien", "do xang", "an sang", "an trua", "an toi",
+            "thanh toan", "dong tien", "di xe", "di taxi"
+        )
+
+        val hasIncome = incomePhrases.any { it in normalized }
+        val hasExpense = expensePhrases.any { it in normalized }
+        val isRefund = "hoan tien" in normalized || "duoc hoan" in normalized
+
+        val type = when {
+            isRefund -> "Thu"
+            hasIncome && hasExpense -> null
+            hasIncome -> "Thu"
+            hasExpense -> "Chi"
             else -> null
         }
-        val candidates = categories.filter { it.type == type && (normalizeVietnameseSearchText(it.name) == suggested?.let(::normalizeVietnameseSearchText) ||
-            Regex("\\b${Regex.escape(normalizeVietnameseSearchText(it.name))}\\b").containsMatchIn(normalized)) }.map { it.name }.distinct()
+
+        val suggested = when {
+            type == "Thu" && ("luong" in normalized) -> "Lương"
+            type == "Thu" && ("thuong" in normalized) -> "Thưởng"
+            type == "Thu" && ("hoan tien" in normalized) -> "Hoàn tiền"
+            listOf("do an", "an sang", "an trua", "an toi", "ca phe", "pho", "com ").any { it in normalized } -> "Ăn uống"
+            "xang" in normalized || "taxi" in normalized || "di xe" in normalized -> "Di chuyển"
+            "hoa don" in normalized || "tien dien" in normalized || "tien nuoc" in normalized -> "Hóa đơn"
+            else -> null
+        }
+
+        val matchingCategories = if (type != null) {
+            categories.filter { it.type == type }
+        } else {
+            categories
+        }
+
+        val candidates = matchingCategories.filter { cat ->
+            val catNorm = normalizeVietnameseSearchText(cat.name)
+            (suggested != null && catNorm == normalizeVietnameseSearchText(suggested)) ||
+                Regex("\\b${Regex.escape(catNorm)}\\b").containsMatchIn(normalized)
+        }.map { it.name }.distinct()
+
         val category = candidates.singleOrNull()
+
         val payment = when {
             "chuyen khoan" in normalized -> "Chuyển khoản"
             "the tin dung" in normalized || "visa" in normalized -> "Thẻ tín dụng"
             "tien mat" in normalized -> "Tiền mặt"
             else -> null
         }
+
         val uncertainDate = listOf("hom kia", "tuan truoc", "thang truoc", "ngay mai").any { it in normalized }
         val explicitDate = Regex("\\b(\\d{1,2})/(\\d{1,2})/(\\d{4})\\b").find(normalized)
         val timestamp = when {
@@ -59,8 +92,12 @@ class TransactionDraftParser(private val clock: DraftDateTimeProvider) {
             "hom qua" in normalized -> clock.relativeDay(-1)
             else -> clock.now()
         }
-        val amount = amounts.singleOrNull()?.takeIf { it > 0 && !Regex("-\\s*\\d").containsMatchIn(normalized) &&
-            listOf("khoang", "co the", "hoac").none { word -> Regex("\\b$word\\b").containsMatchIn(normalized) } }
+
+        val amount = amounts.singleOrNull()?.takeIf {
+            it > 0 && !Regex("-\\s*\\d").containsMatchIn(normalized) &&
+            listOf("khoang", "co the", "hoac").none { word -> Regex("\\b$word\\b").containsMatchIn(normalized) }
+        }
+
         val missing = buildSet {
             if (amount == null) add(DraftField.AMOUNT)
             if (type == null) add(DraftField.TYPE)
@@ -68,7 +105,18 @@ class TransactionDraftParser(private val clock: DraftDateTimeProvider) {
             if (timestamp == null) add(DraftField.DATE)
             if (payment == null) add(DraftField.PAYMENT_METHOD)
         }
-        return TransactionDraft(draftId, userId, amount, type, category, text.trim(), timestamp, payment,
-            confidence = DraftField.entries.associateWith { if (it in missing) 0f else 0.9f }, missingFields = missing)
+
+        return TransactionDraft(
+            id = draftId,
+            userId = userId,
+            amount = amount,
+            type = type,
+            category = category,
+            note = text.trim(),
+            timestamp = timestamp,
+            paymentMethod = payment,
+            confidence = DraftField.entries.associateWith { if (it in missing) 0f else 0.9f },
+            missingFields = missing
+        )
     }
 }

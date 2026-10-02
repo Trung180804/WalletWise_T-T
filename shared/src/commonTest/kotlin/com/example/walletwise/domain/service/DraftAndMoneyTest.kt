@@ -84,6 +84,55 @@ class DraftAndMoneyTest {
             assertEquals(100L, draft.timestamp); assertEquals("Chuyển khoản", draft.paymentMethod)
         }
     }
+    @Test fun vietnameseTransactionIntentInferenceTableTest() {
+        val parser = TransactionDraftParser(DraftTestClock)
+
+        // 1. "Hôm nay được thưởng Tết 500 nghìn" -> 500000, Thu, Thưởng
+        val draft1 = parser.parse("Hôm nay được thưởng Tết 500 nghìn", "d1", "u", DefaultCategories)
+        assertEquals(500000L, draft1.amount)
+        assertEquals("Thu", draft1.type)
+        assertEquals("Thưởng", draft1.category)
+        assertFalse(DraftField.TYPE in draft1.missingFields)
+        assertFalse(DraftField.CATEGORY in draft1.missingFields)
+
+        // 2. Same input when user has NO "Thưởng" category -> amount 500000, type Thu, category null, TYPE not missing
+        val noBonusCategories = DefaultCategories.filterNot { it.name == "Thưởng" }
+        val draft2 = parser.parse("Hôm nay được thưởng Tết 500 nghìn", "d2", "u", noBonusCategories)
+        assertEquals(500000L, draft2.amount)
+        assertEquals("Thu", draft2.type)
+        assertNull(draft2.category)
+        assertFalse(DraftField.TYPE in draft2.missingFields)
+        assertTrue(DraftField.CATEGORY in draft2.missingFields)
+
+        // 3. "Công ty thưởng Tết 5 triệu" -> 5000000, Thu, Thưởng
+        val draft3 = parser.parse("Công ty thưởng Tết 5 triệu", "d3", "u", DefaultCategories)
+        assertEquals(5000000L, draft3.amount)
+        assertEquals("Thu", draft3.type)
+        assertEquals("Thưởng", draft3.category)
+
+        // 4. "Hôm nay nhận lương 10 triệu" -> 10000000, Thu, Lương
+        val draft4 = parser.parse("Hôm nay nhận lương 10 triệu", "d4", "u", DefaultCategories)
+        assertEquals(10000000L, draft4.amount)
+        assertEquals("Thu", draft4.type)
+        assertEquals("Lương", draft4.category)
+
+        // 5. "Mua đồ ăn 50 nghìn" -> 50000, Chi, Ăn uống
+        val draft5 = parser.parse("Mua đồ ăn 50 nghìn", "d5", "u", DefaultCategories)
+        assertEquals(50000L, draft5.amount)
+        assertEquals("Chi", draft5.type)
+        assertEquals("Ăn uống", draft5.category)
+
+        // 6. "Được hoàn tiền mua hàng 200 nghìn" -> 200000, Thu (refund prioritized over "mua")
+        val draft6 = parser.parse("Được hoàn tiền mua hàng 200 nghìn", "d6", "u", DefaultCategories)
+        assertEquals(200000L, draft6.amount)
+        assertEquals("Thu", draft6.type)
+
+        // 7. Ambiguous input without income/expense verb "50 nghìn" -> amount 50000, type null (asks type)
+        val draft7 = parser.parse("50 nghìn", "d7", "u", DefaultCategories)
+        assertEquals(50000L, draft7.amount)
+        assertNull(draft7.type)
+        assertTrue(DraftField.TYPE in draft7.missingFields)
+    }
     @Test fun ambiguousMissingUnknownCategoryAndOverflowNeedCorrection() {
         val parser = TransactionDraftParser(DraftTestClock)
         assertNull(parser.parse("mua đồ ăn", "d", "u", DefaultCategories).amount)
